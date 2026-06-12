@@ -1,17 +1,15 @@
 # Dev Environment
 
-A reusable scaffolding tool for multi-repo OpenShift development environments. Define which repositories you need in a YAML config, and this tool clones, organizes, and provides AI-assisted context for your entire workspace.
+A multi-repo workspace manager for AI-assisted development. Declare the repositories you need in a YAML manifest (`dev-env.yaml`), and this tool clones and organizes them, layers per-repo Claude context on top, and provides structured project workspaces for long-running tasks.
 
-Ships with a **preset system** for common development scenarios — start with a preset or build your own custom environment.
-
-Also contains skills to manage long-term projects with their own context and task management
+Ships with a **preset system** for common development scenarios — start with a bundled preset (the included ones target OpenShift components) or build your own custom environment for any domain.
 
 ## Quick Start
 
 ```bash
 # 1. Clone this repo as your workspace
-git clone <your-fork-url>
-cd tnf-dev-env
+git clone <your-fork-url> my-workspace
+cd my-workspace
 
 # 2. Install Claude Code if you haven't already
 # https://docs.anthropic.com/en/docs/claude-code/overview

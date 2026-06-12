@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Repo Is
 
-A **reusable development environment generator** for multi-repo OpenShift development. It provides:
+A **multi-repo workspace manager for AI-assisted development**. It provides:
 - A preset system for bootstrapping dev environments (`presets/`)
 - A setup script for cloning and managing repositories (`setup.sh`)
 - Project workspaces for structured task tracking (`projects/`)
