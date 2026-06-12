@@ -20,8 +20,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOS_DIR="$SCRIPT_DIR/repos"
 DEV_ENV_YAML="$SCRIPT_DIR/dev-env.yaml"
 DEV_ENV_TEMPLATE="$SCRIPT_DIR/dev-env.yaml.template"
-REPOS_FILE="$SCRIPT_DIR/repos.txt"
-REPOS_TEMPLATE="$SCRIPT_DIR/repos.txt.template"
 PRESETS_DIR="$SCRIPT_DIR/presets"
 
 # Colors for output
@@ -70,36 +68,13 @@ for r in data.get('repos', []):
 }
 
 # ─── Repo Source Detection ────────────────────────────────────────────────────
-# Determines which config file to use and sets REPO_SOURCE and REPO_FORMAT.
+# Verifies dev-env.yaml exists and sets REPO_SOURCE.
 
 REPO_SOURCE=""
-REPO_FORMAT=""
 
 detect_repo_source() {
     if [[ -f "$DEV_ENV_YAML" ]]; then
         REPO_SOURCE="$DEV_ENV_YAML"
-        REPO_FORMAT="yaml"
-    elif [[ -f "$REPOS_FILE" ]]; then
-        log_warn "Using legacy repos.txt — consider migrating to dev-env.yaml"
-        log_warn "  Run: ./setup.sh init <preset>  (or copy dev-env.yaml.template)"
-        REPO_SOURCE="$REPOS_FILE"
-        REPO_FORMAT="txt"
-    elif [[ -f "$REPOS_TEMPLATE" ]]; then
-        log_warn "No dev-env.yaml or repos.txt found."
-        log_warn "A legacy repos.txt.template exists with preset-specific repos."
-        log_info "Recommended: ./setup.sh init <preset>  (or copy dev-env.yaml.template)"
-        read -rp "Use legacy template to create repos.txt? [y/N] " answer
-        if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
-            cp "$REPOS_TEMPLATE" "$REPOS_FILE"
-            log_success "Created repos.txt from template"
-            REPO_SOURCE="$REPOS_FILE"
-            REPO_FORMAT="txt"
-        else
-            log_info "Aborted. To get started:"
-            log_info "  ./setup.sh init <preset>  — Initialize from a preset"
-            log_info "  cp dev-env.yaml.template dev-env.yaml  — Start from template"
-            exit 0
-        fi
     else
         log_error "No repo configuration found!"
         log_info "Options:"
@@ -110,52 +85,19 @@ detect_repo_source() {
 }
 
 # ─── Line Iteration ──────────────────────────────────────────────────────────
-# Iterates over repos from the detected source, calling a callback with:
+# Iterates over repos from dev-env.yaml, calling a callback with:
 #   url, dir, branch (set as globals for backward compat)
 
 iterate_repos() {
     local callback="$1"
 
-    if [[ "$REPO_FORMAT" == "yaml" ]]; then
-        while IFS='|' read -r url dir branch _name _cat _summary; do
-            if [[ -z "$url" || -z "$dir" ]]; then
-                [[ -n "$_name" || -n "$url" ]] && log_warn "Skipping entry with missing url or name: ${_name:-${url:-unknown}}"
-                continue
-            fi
-            "$callback"
-        done < <(parse_yaml_repos "$REPO_SOURCE")
-    else
-        while IFS= read -r line; do
-            if parse_repo_line "$line"; then
-                "$callback"
-            fi
-        done < "$REPO_SOURCE"
-    fi
-}
-
-# Parse a line from repos.txt (legacy format)
-# Returns: url, dir, branch (in global variables)
-parse_repo_line() {
-    local line="$1"
-
-    # Skip comments and empty lines
-    [[ "$line" =~ ^[[:space:]]*# ]] && return 1
-    [[ -z "${line// }" ]] && return 1
-
-    # Parse pipe-separated fields
-    IFS='|' read -r url dir branch <<< "$line"
-
-    # Trim whitespace
-    url="$(echo "$url" | xargs)"
-    dir="$(echo "$dir" | xargs)"
-    branch="$(echo "$branch" | xargs)"
-
-    [[ -z "$url" ]] && return 1
-    if [[ -z "$dir" ]]; then
-        log_warn "Skipping entry with missing directory: $url"
-        return 1
-    fi
-    return 0
+    while IFS='|' read -r url dir branch _name _cat _summary; do
+        if [[ -z "$url" || -z "$dir" ]]; then
+            [[ -n "$_name" || -n "$url" ]] && log_warn "Skipping entry with missing url or name: ${_name:-${url:-unknown}}"
+            continue
+        fi
+        "$callback"
+    done < <(parse_yaml_repos "$REPO_SOURCE")
 }
 
 # ─── Clone / Update ──────────────────────────────────────────────────────────
@@ -319,26 +261,14 @@ show_status() {
 # List configured repos
 list_repos() {
     echo
-    if [[ "$REPO_FORMAT" == "yaml" ]]; then
-        printf "%-30s %-10s %-50s %-12s\n" "DIRECTORY" "CATEGORY" "URL" "BRANCH"
-        printf "%-30s %-10s %-50s %-12s\n" "---------" "--------" "---" "------"
+    printf "%-30s %-10s %-50s %-12s\n" "DIRECTORY" "CATEGORY" "URL" "BRANCH"
+    printf "%-30s %-10s %-50s %-12s\n" "---------" "--------" "---" "------"
 
-        while IFS='|' read -r url dir branch name cat summary; do
-            [[ -z "$url" ]] && continue
-            local short_url="${url#https://github.com/}"
-            printf "%-30s %-10s %-50s %-12s\n" "$dir" "$cat" "$short_url" "$branch"
-        done < <(parse_yaml_repos "$REPO_SOURCE")
-    else
-        printf "%-30s %-50s %-12s\n" "DIRECTORY" "URL" "BRANCH"
-        printf "%-30s %-50s %-12s\n" "---------" "---" "------"
-
-        while IFS= read -r line; do
-            if parse_repo_line "$line"; then
-                local short_url="${url#https://github.com/}"
-                printf "%-30s %-50s %-12s\n" "$dir" "$short_url" "$branch"
-            fi
-        done < "$REPO_SOURCE"
-    fi
+    while IFS='|' read -r url dir branch name cat summary; do
+        [[ -z "$url" ]] && continue
+        local short_url="${url#https://github.com/}"
+        printf "%-30s %-10s %-50s %-12s\n" "$dir" "$cat" "$short_url" "$branch"
+    done < <(parse_yaml_repos "$REPO_SOURCE")
 }
 
 # ─── Init from Preset ────────────────────────────────────────────────────────
@@ -429,8 +359,7 @@ usage() {
     echo "  ./setup.sh help         Show this help"
     echo
     echo "Configuration:"
-    echo "  dev-env.yaml (preferred) — YAML format with metadata"
-    echo "  repos.txt (legacy)       — Pipe-separated format"
+    echo "  dev-env.yaml — YAML format with metadata"
     echo
     echo "Presets:"
     echo "  Run './setup.sh init' to see available presets."
