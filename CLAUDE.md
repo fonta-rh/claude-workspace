@@ -63,8 +63,6 @@ Projects that modify source repos use git worktrees for branch isolation, allowi
 | `/project:resume` | Resume an existing project | Reload context and continue work |
 | `/project:close` | Close a completed project | Mark as done, add closing notes |
 | `/project:update` | Update project docs from session | Record progress to project CLAUDE.md |
-| `/critique` | Adversarial hypothesis review | Challenge a theory with counter-evidence and experiments |
-| `/vet-review` | Skeptical review follow-up | Filter noise from `/review-pr` findings — vet one by one |
 
 ## Preset Docs
 
