@@ -1,7 +1,7 @@
 ---
 name: dev-env-setup
 description: Initialize or refresh a dev environment from a preset or custom config
-argument-hint: [setup|setup custom]
+argument-hint: [setup|setup custom|<git-url>]
 user-invocable: true
 ---
 
@@ -15,6 +15,9 @@ and generating the root CLAUDE.md repo table.
 
 Parse `$ARGUMENTS` to determine the mode:
 
+- **`$ARGUMENTS` is a git URL** (starts with `https://`, `git@`, `ssh://`,
+  `git://`, or ends with `.git`): Follow [Mode A](#mode-a-from-preset),
+  but skip Step 1 — use the URL directly as the preset source.
 - **`$ARGUMENTS` is empty, "setup", or starts with "setup "** (but NOT
   "setup custom"): Follow [Mode A: From Preset](#mode-a-from-preset)
 - **`$ARGUMENTS` is "setup custom" or starts with "setup custom "**:
@@ -24,19 +27,47 @@ Parse `$ARGUMENTS` to determine the mode:
 
 ## Mode A: From Preset
 
+### Step 0: Check for existing preset (refresh path)
+
+Before presenting choices, check if `dev-env.yaml` already exists and
+contains a `preset:` block. If it does, read the `source` field:
+- If source is `bundled`: offer to refresh from the local preset files.
+- If source is a URL: offer to re-fetch from that URL.
+
+Use AskUserQuestion with options:
+- **"Re-initialize (keep current preset)"** — refresh from the recorded source
+- **"Choose a different preset"** — continue to Step 1
+
+If `dev-env.yaml` does not exist, skip this step and go to Step 1.
+
 ### Step 1: Select Preset
 
-List available presets by scanning the `presets/` directory. For each
-subdirectory, read `preset.yaml` to get name and description.
+**If `$ARGUMENTS` is a git URL**, skip the question — use that URL as the
+preset source and go straight to Step 2.
 
-Present the presets to the user via AskUserQuestion. If only one preset
-exists, suggest it as the default but still confirm.
+Otherwise, list available presets by scanning the `presets/` directory.
+For each subdirectory, read `preset.yaml` to get name and description.
+
+Present the presets to the user via AskUserQuestion with the following options:
+- One option per bundled preset (name + description)
+- An additional option: **"External preset (git URL)"**
+
+If the user selects "External preset", ask them to provide the git URL.
+The URL may include a `#subdir` fragment for packs that contain multiple presets
+(e.g., `https://github.com/org/presets.git#myteam`).
+
+If only one bundled preset exists, suggest it as the default but still confirm.
 
 ### Step 2: Initialize
 
-Run `./setup.sh init <preset-name>` via Bash to copy the preset's
-`dev-env.yaml` to the root. This also copies `settings.local.json.tpl`
-if `.claude/settings.local.json` doesn't exist yet.
+Run `./setup.sh init <preset-name-or-url>` via Bash. This:
+- For bundled presets: copies `dev-env.yaml` to the root.
+- For external URLs: shallow-clones the pack, validates the layout,
+  installs it into `presets/<name>/`, then copies `dev-env.yaml`.
+- In both cases: records the preset source in `dev-env.yaml` and copies
+  `settings.local.json.tpl` if `.claude/settings.local.json` doesn't exist.
+
+If refreshing (Step 0 chose refresh), run `./setup.sh refresh-preset` instead.
 
 ### Step 3: Clone Repos
 
@@ -80,7 +111,7 @@ Present a summary to the user:
 - Number of repos cloned
 - Which repos got supplemental CLAUDE.md files
 - Which repos already had native CLAUDE.md files (skipped)
-- Pointer to preset docs (`presets/<preset>/docs/`)
+- Pointer to preset docs (`presets/<preset>/docs/`) if the directory exists
 - Suggest next steps: `/project:new` to start a task
 
 ---
@@ -229,6 +260,8 @@ Show the user what was set up:
   the repo and shared across the team
 - When copying context files to `repos/<name>/CLAUDE.md`, those copies
   are gitignored via the `repos/` entry in `.gitignore`
+- External preset directories under `presets/<name>/` are gitignored via
+  `.git/info/exclude` (local-only, not committed)
 - Dispatch Explore agents in parallel (single message with multiple Task
   tool calls) for efficiency during Mode B Step 5b
 - Include the user's project description from Step 1 in every Explore
