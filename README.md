@@ -52,6 +52,8 @@ Create your own preset by adding a directory under `presets/` with a `preset.yam
 | `/dev-env-setup` | Initialize or refresh dev environment | Set up from preset or custom repos |
 | `/project:new` | Create a new project workspace | Structured workspace for a specific task |
 | `/project:resume` | Resume an existing project | Reload context and continue work |
+| `/project:close` | Close a completed project | Mark as done, add closing notes |
+| `/project:update` | Update project docs from session | Record progress to project CLAUDE.md |
 
 ## Configuration
 

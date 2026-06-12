@@ -65,10 +65,6 @@ Projects that modify source repos use git worktrees for branch isolation, allowi
 | `/project:update` | Update project docs from session | Record progress to project CLAUDE.md |
 | `/critique` | Adversarial hypothesis review | Challenge a theory with counter-evidence and experiments |
 | `/vet-review` | Skeptical review follow-up | Filter noise from `/review-pr` findings — vet one by one |
-| `/qc:setup` | Configure Quarterly Connection | Company, profile, GitHub, Jira setup |
-| `/qc:log` | Log a work achievement | Auto-categorized quarterly log entry |
-| `/qc:report` | Generate quarterly report | Full narrative + HTML with GitHub/Jira data |
-| `/qc:help` | Show all QC commands | Full command list for quarterly reviews |
 
 ## Preset Docs
 
