@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/recent-projects.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/recent-projects.py"
           }
         ]
       }

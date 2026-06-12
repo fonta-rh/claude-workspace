@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Repo Is
 
-A **reusable development environment generator** for multi-repo OpenShift development. It provides:
+A **multi-repo workspace manager for AI-assisted development**. It provides:
 - A preset system for bootstrapping dev environments (`presets/`)
 - A setup script for cloning and managing repositories (`setup.sh`)
 - Project workspaces for structured task tracking (`projects/`)
@@ -63,12 +63,6 @@ Projects that modify source repos use git worktrees for branch isolation, allowi
 | `/project:resume` | Resume an existing project | Reload context and continue work |
 | `/project:close` | Close a completed project | Mark as done, add closing notes |
 | `/project:update` | Update project docs from session | Record progress to project CLAUDE.md |
-| `/critique` | Adversarial hypothesis review | Challenge a theory with counter-evidence and experiments |
-| `/vet-review` | Skeptical review follow-up | Filter noise from `/review-pr` findings — vet one by one |
-| `/qc:setup` | Configure Quarterly Connection | Company, profile, GitHub, Jira setup |
-| `/qc:log` | Log a work achievement | Auto-categorized quarterly log entry |
-| `/qc:report` | Generate quarterly report | Full narrative + HTML with GitHub/Jira data |
-| `/qc:help` | Show all QC commands | Full command list for quarterly reviews |
 
 ## Preset Docs
 
