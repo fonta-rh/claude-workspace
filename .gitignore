@@ -2,8 +2,7 @@
 repos/
 
 # User configuration (generated from preset or template)
-repos.txt
-dev-env.yaml
+/dev-env.yaml
 
 # Editor/IDE files
 .idea/
