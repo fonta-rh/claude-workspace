@@ -512,6 +512,68 @@ with open(yaml_file, 'w') as f:
 PYEOF
 }
 
+# ─── Settings Merge ──────────────────────────────────────────────────────────
+# Merge a settings template into an existing settings.local.json.
+# Adds missing top-level keys (e.g. hooks) and appends new permissions.allow
+# entries without overwriting existing values.
+
+merge_settings_template() {
+    local target="$1"
+    local template="$2"
+
+    if ! python3 -c "import json" 2>/dev/null; then
+        log_warn "python3 not available — cannot merge settings template"
+        return 0
+    fi
+
+    local result
+    result=$(python3 - "$target" "$template" << 'PYEOF'
+import json, sys
+
+target_path, template_path = sys.argv[1], sys.argv[2]
+
+with open(target_path) as f:
+    target = json.load(f)
+with open(template_path) as f:
+    template = json.load(f)
+
+changed = []
+
+# Merge permissions.allow: append entries not already present
+if "permissions" in template and "allow" in template["permissions"]:
+    target.setdefault("permissions", {}).setdefault("allow", [])
+    existing = set(target["permissions"]["allow"])
+    for entry in template["permissions"]["allow"]:
+        if entry not in existing:
+            target["permissions"]["allow"].append(entry)
+            changed.append(f"  + permission: {entry}")
+
+# Merge top-level keys that don't exist in target (hooks, env, etc.)
+for key in template:
+    if key == "permissions":
+        continue
+    if key not in target:
+        target[key] = template[key]
+        changed.append(f"  + {key}")
+
+if changed:
+    with open(target_path, "w") as f:
+        json.dump(target, f, indent=2)
+        f.write("\n")
+    print("\n".join(changed))
+else:
+    print("__NO_CHANGES__")
+PYEOF
+    )
+
+    if [[ "$result" == "__NO_CHANGES__" ]]; then
+        log_success ".claude/settings.local.json already up to date"
+    else
+        log_success "Merged template into .claude/settings.local.json:"
+        echo "$result"
+    fi
+}
+
 # ─── Init from Preset ────────────────────────────────────────────────────────
 
 init_preset() {
@@ -580,20 +642,21 @@ init_preset() {
 
     local settings_dir="$SCRIPT_DIR/.claude"
     local settings_file="$settings_dir/settings.local.json"
-    if [[ ! -f "$settings_file" ]]; then
-        local settings_tpl=""
-        if [[ -f "$preset_dir/settings.local.json.tpl" ]]; then
-            settings_tpl="$preset_dir/settings.local.json.tpl"
-        elif [[ -f "$SCRIPT_DIR/settings.local.json.tpl" ]]; then
-            settings_tpl="$SCRIPT_DIR/settings.local.json.tpl"
-        fi
-        if [[ -n "$settings_tpl" ]]; then
-            mkdir -p "$settings_dir"
-            cp "$settings_tpl" "$settings_file"
-            log_success "Created .claude/settings.local.json from template"
-        fi
+    local settings_tpl=""
+    if [[ -f "$preset_dir/settings.local.json.tpl" ]]; then
+        settings_tpl="$preset_dir/settings.local.json.tpl"
+    elif [[ -f "$SCRIPT_DIR/settings.local.json.tpl" ]]; then
+        settings_tpl="$SCRIPT_DIR/settings.local.json.tpl"
+    fi
+
+    if [[ -z "$settings_tpl" ]]; then
+        : # no template available
+    elif [[ ! -f "$settings_file" ]]; then
+        mkdir -p "$settings_dir"
+        cp "$settings_tpl" "$settings_file"
+        log_success "Created .claude/settings.local.json from template"
     else
-        log_warn ".claude/settings.local.json already exists, skipping"
+        merge_settings_template "$settings_file" "$settings_tpl"
     fi
 
     echo
