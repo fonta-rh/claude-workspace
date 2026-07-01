@@ -68,13 +68,13 @@ assert_output_contains() {
 
 # ─── Workspace + fixture helpers ─────────────────────────────────────────────
 
-# Create an isolated workspace: copy of setup.sh + presets/ + a bare .git for
+# Create an isolated workspace: copy of setup.sh + domains/ + a bare .git for
 # .git/info/exclude support.
 new_workspace() {
     local ws
     ws=$(mktemp -d)
     cp "$REPO_ROOT/setup.sh" "$ws/"
-    cp -r "$REPO_ROOT/presets" "$ws/"
+    cp -r "$REPO_ROOT/domains" "$ws/"
     git init -q "$ws"
     git -C "$ws" config user.email "test@test.com"
     git -C "$ws" config user.name "Test"
@@ -83,15 +83,15 @@ new_workspace() {
 
 cleanup() { rm -rf "$1"; }
 
-# Write a minimal valid preset into a directory.
-make_preset_dir() {
-    local dir="$1" name="${2:-test-preset}"
+# Write a minimal valid domain into a directory.
+make_domain_dir() {
+    local dir="$1" name="${2:-test-domain}"
     mkdir -p "$dir/context"
-    printf 'name: %s\ndescription: "Test preset for automated tests"\n' "$name" \
-        > "$dir/preset.yaml"
+    printf 'name: %s\ndescription: "Test domain for automated tests"\n' "$name" \
+        > "$dir/domain.yaml"
     printf 'repos:\n  - name: testrepo\n    url: https://example.com/r.git\n    branch: main\n    category: testing\n    summary: "test repo"\n' \
         > "$dir/dev-env.yaml"
-    printf '# testrepo — test context (preset: %s)\n' "$name" \
+    printf '# testrepo — test context (domain: %s)\n' "$name" \
         > "$dir/context/testrepo.md"
 }
 
@@ -130,27 +130,27 @@ run_setup_yn() {
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
-# ── 1. Bundled preset init ────────────────────────────────────────────────────
-group "Bundled preset init"
+# ── 1. Bundled domain init ────────────────────────────────────────────────────
+group "Bundled domain init"
 
 ws=$(new_workspace)
 
 out=$(run_setup "$ws" init 2>&1) || true
-assert_output_contains "init (no args) exits 0"         "Available presets"  "$out"
+assert_output_contains "init (no args) exits 0"         "Available domains"  "$out"
 assert_output_contains "init (no args) lists example"   "example"            "$out"
 assert_output_contains "init (no args) shows URL hint"  "url"                "$out"
 
 run_setup_yn "$ws" "y" init example >/dev/null 2>&1
 assert_file      "init example creates dev-env.yaml"        "$ws/dev-env.yaml"
-assert_contains  "preset block: name"                       "$ws/dev-env.yaml" "name: example"
-assert_contains  "preset block: source bundled"             "$ws/dev-env.yaml" "source: bundled"
-assert_not_contains "no stray scalar preset: line"          "$ws/dev-env.yaml" "^preset: example"
+assert_contains  "domain block: name"                       "$ws/dev-env.yaml" "name: example"
+assert_contains  "domain block: source bundled"             "$ws/dev-env.yaml" "source: bundled"
+assert_not_contains "no stray scalar domain: line"          "$ws/dev-env.yaml" "^domain: example"
 
-# Re-init with tnf to verify scalar 'preset: tnf' is replaced by the mapping
+# Re-init with tnf to verify scalar 'domain: tnf' is replaced by the mapping
 run_setup_yn "$ws" "y" init tnf >/dev/null 2>&1
 assert_contains  "tnf scalar replaced: name"   "$ws/dev-env.yaml" "name: tnf"
 assert_contains  "tnf scalar replaced: source" "$ws/dev-env.yaml" "source: bundled"
-assert_not_contains "scalar form gone"         "$ws/dev-env.yaml" "^preset: tnf"
+assert_not_contains "scalar form gone"         "$ws/dev-env.yaml" "^domain: tnf"
 
 cleanup "$ws"
 
@@ -159,67 +159,67 @@ group "Validation errors"
 
 ws=$(new_workspace)
 
-assert_failure "unknown bundled preset name exits non-zero" \
+assert_failure "unknown bundled domain name exits non-zero" \
     run_setup "$ws" init does-not-exist
 
-# Preset missing dev-env.yaml
-bad_preset="$ws/presets/no-devenv"
-mkdir -p "$bad_preset"
-printf 'name: no-devenv\n' > "$bad_preset/preset.yaml"
+# Domain missing dev-env.yaml
+bad_domain="$ws/domains/no-devenv"
+mkdir -p "$bad_domain"
+printf 'name: no-devenv\n' > "$bad_domain/domain.yaml"
 out=$(run_setup "$ws" init no-devenv 2>&1) || true
 assert_output_contains "missing dev-env.yaml: error shown" "dev-env.yaml" "$out"
-assert_output_contains "missing dev-env.yaml: layout hint shown" "preset.yaml" "$out"
+assert_output_contains "missing dev-env.yaml: layout hint shown" "domain.yaml" "$out"
 
-# Preset missing preset.yaml
-bad_preset2="$ws/presets/no-presetyaml"
-mkdir -p "$bad_preset2"
-printf 'repos: []\n' > "$bad_preset2/dev-env.yaml"
-out=$(run_setup "$ws" init no-presetyaml 2>&1) || true
-assert_output_contains "missing preset.yaml: error shown" "preset.yaml" "$out"
+# Domain missing domain.yaml
+bad_domain2="$ws/domains/no-domainyaml"
+mkdir -p "$bad_domain2"
+printf 'repos: []\n' > "$bad_domain2/dev-env.yaml"
+out=$(run_setup "$ws" init no-domainyaml 2>&1) || true
+assert_output_contains "missing domain.yaml: error shown" "domain.yaml" "$out"
 
 cleanup "$ws"
 
-# ── 3. External preset init (file://) ─────────────────────────────────────────
-group "External preset init (file://)"
+# ── 3. External domain init (file://) ─────────────────────────────────────────
+group "External domain init (file://)"
 
 ws=$(new_workspace)
 fixture=$(mktemp -d)
-make_preset_dir "$fixture" "ext-preset"
+make_domain_dir "$fixture" "ext-domain"
 git_commit_all "$fixture"
 
 run_setup_yn "$ws" "y" init "file://$fixture" >/dev/null 2>&1
 
-assert_dir      "external preset installed in presets/"    "$ws/presets/ext-preset"
-assert_file     "installed preset has preset.yaml"         "$ws/presets/ext-preset/preset.yaml"
-assert_file     "installed preset has dev-env.yaml"        "$ws/presets/ext-preset/dev-env.yaml"
+assert_dir      "external domain installed in domains/"    "$ws/domains/ext-domain"
+assert_file     "installed domain has domain.yaml"         "$ws/domains/ext-domain/domain.yaml"
+assert_file     "installed domain has dev-env.yaml"        "$ws/domains/ext-domain/dev-env.yaml"
 assert_file     "dev-env.yaml created at workspace root"   "$ws/dev-env.yaml"
-assert_contains "preset block has source URL"              "$ws/dev-env.yaml" "source: file://$fixture"
-assert_contains "preset block has name from preset.yaml"   "$ws/dev-env.yaml" "name: ext-preset"
+assert_contains "domain block has source URL"              "$ws/dev-env.yaml" "source: file://$fixture"
+assert_contains "domain block has name from domain.yaml"   "$ws/dev-env.yaml" "name: ext-domain"
 
-# .git/info/exclude should have the external preset pattern
-assert_contains "external preset added to git exclude" \
-    "$ws/.git/info/exclude" "presets/ext-preset/"
+# .git/info/exclude should have the external domain pattern
+assert_contains "external domain added to git exclude" \
+    "$ws/.git/info/exclude" "domains/ext-domain/"
 
 cleanup "$ws"
 cleanup "$fixture"
 
-# ── 4. External preset — #subdir form ─────────────────────────────────────────
-group "External preset pack with #subdir"
+# ── 4. External domain — #subdir form ─────────────────────────────────────────
+group "External domain pack with #subdir"
 
 ws=$(new_workspace)
 pack=$(mktemp -d)
 
-# Pack repo contains two preset subdirs
-make_preset_dir "$pack/team-alpha" "team-alpha"
-make_preset_dir "$pack/team-beta"  "team-beta"
+# Pack repo contains two domain subdirs
+make_domain_dir "$pack/team-alpha" "team-alpha"
+make_domain_dir "$pack/team-beta"  "team-beta"
 git_commit_all "$pack"
 
 run_setup_yn "$ws" "y" init "file://$pack#team-alpha" >/dev/null 2>&1
 
-assert_dir      "correct subdir installed"                 "$ws/presets/team-alpha"
-assert_file     "subdir preset.yaml present"               "$ws/presets/team-alpha/preset.yaml"
+assert_dir      "correct subdir installed"                 "$ws/domains/team-alpha"
+assert_file     "subdir domain.yaml present"               "$ws/domains/team-alpha/domain.yaml"
 # Wrong subdir should NOT be installed
-if [[ ! -d "$ws/presets/team-beta" ]]; then
+if [[ ! -d "$ws/domains/team-beta" ]]; then
     ok "other subdir not installed"
 else
     fail "other subdir not installed" "team-beta was unexpectedly installed"
@@ -229,8 +229,8 @@ assert_contains "subdir recorded in dev-env.yaml"          "$ws/dev-env.yaml" "s
 cleanup "$ws"
 cleanup "$pack"
 
-# ── 5. External preset — broken layout errors ──────────────────────────────────
-group "External preset validation (file://)"
+# ── 5. External domain — broken layout errors ──────────────────────────────────
+group "External domain validation (file://)"
 
 ws=$(new_workspace)
 
@@ -240,24 +240,24 @@ echo "just a file" > "$bad_pack/README.md"
 git_commit_all "$bad_pack"
 
 out=$(run_setup_yn "$ws" "y" init "file://$bad_pack" 2>&1) || true
-assert_output_contains "broken pack: error mentions preset.yaml"  "preset.yaml"  "$out"
+assert_output_contains "broken pack: error mentions domain.yaml"  "domain.yaml"  "$out"
 assert_output_contains "broken pack: error mentions dev-env.yaml" "dev-env.yaml" "$out"
 
 cleanup "$ws"
 cleanup "$bad_pack"
 
-# ── 6. refresh-preset ─────────────────────────────────────────────────────────
-group "refresh-preset"
+# ── 6. refresh-domain ─────────────────────────────────────────────────────────
+group "refresh-domain"
 
 ws=$(new_workspace)
 
 # Without dev-env.yaml — should error
-out=$(run_setup "$ws" refresh-preset 2>&1) || true
+out=$(run_setup "$ws" refresh-domain 2>&1) || true
 assert_output_contains "no dev-env.yaml: helpful error" "init" "$out"
 
 # Bundled refresh
 run_setup_yn "$ws" "y" init example >/dev/null 2>&1
-run_setup_yn "$ws" "y" refresh-preset >/dev/null 2>&1
+run_setup_yn "$ws" "y" refresh-domain >/dev/null 2>&1
 assert_file     "dev-env.yaml still present after bundled refresh" "$ws/dev-env.yaml"
 assert_contains "source still bundled after refresh"               "$ws/dev-env.yaml" "source: bundled"
 
@@ -266,65 +266,65 @@ cleanup "$ws"
 # External refresh: modify fixture between init and refresh, verify update applied
 ws=$(new_workspace)
 fixture=$(mktemp -d)
-make_preset_dir "$fixture" "refreshable"
+make_domain_dir "$fixture" "refreshable"
 git_commit_all "$fixture"
 
 run_setup_yn "$ws" "y" init "file://$fixture" >/dev/null 2>&1
 
-# Modify the preset (add a new file) and re-commit so there's something to refresh
-echo "new_field: added" >> "$fixture/preset.yaml"
+# Modify the domain (add a new file) and re-commit so there's something to refresh
+echo "new_field: added" >> "$fixture/domain.yaml"
 git -C "$fixture" add -A
-git -C "$fixture" commit -q -m "update preset"
+git -C "$fixture" commit -q -m "update domain"
 
-run_setup_yn "$ws" "y" refresh-preset >/dev/null 2>&1
+run_setup_yn "$ws" "y" refresh-domain >/dev/null 2>&1
 assert_file     "dev-env.yaml present after external refresh"  "$ws/dev-env.yaml"
-assert_contains "updated preset.yaml installed"                \
-    "$ws/presets/refreshable/preset.yaml" "new_field"
+assert_contains "updated domain.yaml installed"                \
+    "$ws/domains/refreshable/domain.yaml" "new_field"
 
 cleanup "$ws"
 cleanup "$fixture"
 
-# ── 7. parse_yaml_preset — legacy scalar format ───────────────────────────────
-group "parse_yaml_preset backward compat"
+# ── 7. parse_yaml_domain — scalar format ──────────────────────────────────────
+group "parse_yaml_domain scalar format"
 
 ws=$(new_workspace)
 
-# Write a dev-env.yaml with the old scalar form (as the tnf preset still ships)
+# Write a dev-env.yaml with the scalar domain form (as the tnf domain ships)
 cat > "$ws/dev-env.yaml" << 'EOF'
-preset: example
+domain: example
 
 repos: []
 EOF
 
-# refresh-preset reads the preset: block via parse_yaml_preset; if it handles
-# the scalar form it will find "example", locate presets/example/, and succeed.
-run_setup_yn "$ws" "y" refresh-preset >/dev/null 2>&1
-assert_contains "scalar parsed: refresh finds preset name"    "$ws/dev-env.yaml" "name: example"
+# refresh-domain reads the domain: block via parse_yaml_domain; if it handles
+# the scalar form it will find "example", locate domains/example/, and succeed.
+run_setup_yn "$ws" "y" refresh-domain >/dev/null 2>&1
+assert_contains "scalar parsed: refresh finds domain name"    "$ws/dev-env.yaml" "name: example"
 assert_contains "scalar upgraded to mapping after refresh"    "$ws/dev-env.yaml" "source: bundled"
-assert_not_contains "scalar form gone after refresh"          "$ws/dev-env.yaml" "^preset: example"
+assert_not_contains "scalar form gone after refresh"          "$ws/dev-env.yaml" "^domain: example"
 
 cleanup "$ws"
 
-# ── 8. Active-preset scoping in clone_repo ────────────────────────────────────
-group "clone_repo: context files from active preset only"
+# ── 8. Active-domain scoping in clone_repo ────────────────────────────────────
+group "clone_repo: context files from active domain only"
 
 ws=$(new_workspace)
 
-# Two presets, both with context for "sharedrepo" — different content
-mkdir -p "$ws/presets/alpha/context" "$ws/presets/beta/context"
+# Two domains, both with context for "sharedrepo" — different content
+mkdir -p "$ws/domains/alpha/context" "$ws/domains/beta/context"
 
-printf 'name: alpha\ndescription: "Alpha"\n' > "$ws/presets/alpha/preset.yaml"
-printf 'name: beta\ndescription: "Beta"\n'   > "$ws/presets/beta/preset.yaml"
-printf '# context from ALPHA\n'  > "$ws/presets/alpha/context/sharedrepo.md"
-printf '# context from BETA\n'   > "$ws/presets/beta/context/sharedrepo.md"
+printf 'name: alpha\ndescription: "Alpha"\n' > "$ws/domains/alpha/domain.yaml"
+printf 'name: beta\ndescription: "Beta"\n'   > "$ws/domains/beta/domain.yaml"
+printf '# context from ALPHA\n'  > "$ws/domains/alpha/context/sharedrepo.md"
+printf '# context from BETA\n'   > "$ws/domains/beta/context/sharedrepo.md"
 
 # Create a tiny cloneable git repo for sharedrepo
 shared_src=$(mktemp -d)
 make_cloneable_repo "$shared_src" "sharedrepo"
 
-# Write dev-env.yaml with active preset = alpha, pointing at local repo
+# Write dev-env.yaml with active domain = alpha, pointing at local repo
 cat > "$ws/dev-env.yaml" << EOF
-preset:
+domain:
   name: alpha
   source: bundled
 
@@ -339,9 +339,9 @@ EOF
 run_setup "$ws" clone >/dev/null 2>&1
 
 assert_file     "sharedrepo cloned"                       "$ws/repos/sharedrepo/README.md"
-assert_file     "TNF-CONTEXT.md distributed"              "$ws/repos/sharedrepo/TNF-CONTEXT.md"
-assert_contains "context is from ALPHA (active preset)"   "$ws/repos/sharedrepo/TNF-CONTEXT.md" "ALPHA"
-assert_not_contains "context is NOT from BETA"            "$ws/repos/sharedrepo/TNF-CONTEXT.md" "BETA"
+assert_file     "DOMAIN-CONTEXT.md distributed"              "$ws/repos/sharedrepo/DOMAIN-CONTEXT.md"
+assert_contains "context is from ALPHA (active domain)"   "$ws/repos/sharedrepo/DOMAIN-CONTEXT.md" "ALPHA"
+assert_not_contains "context is NOT from BETA"            "$ws/repos/sharedrepo/DOMAIN-CONTEXT.md" "BETA"
 
 cleanup "$ws"
 cleanup "$shared_src"

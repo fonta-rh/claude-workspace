@@ -22,17 +22,17 @@ and handle by `status`:
 
 Store the `project` object from the JSON as `P` for the remaining steps.
 Store the top-level `root` field as the **workspace root**. All paths in
-`P` (context_file, repo_context_files, worktree paths, preset docs, etc.)
+`P` (context_file, repo_context_files, worktree paths, domain docs, etc.)
 are relative to this root. **Always join `root` + relative path** to form
 absolute paths when using the Read tool or Bash commands.
 
 ## Step 2: Load Project Index
 
 1. Read `P.context_file` using the Read tool (skip if null).
-2. If `P.preset_context` is non-null, read it immediately using the Read
+2. If `P.domain_context` is non-null, read it immediately using the Read
    tool. This is a short orientation file (~20-30 lines) that provides
-   essential context about the preset's system architecture.
-3. **Do NOT read `P.repo_context_files` or `P.preset_docs` yet.** Store
+   essential context about the domain's system architecture.
+3. **Do NOT read `P.repo_context_files` or `P.domain_docs` yet.** Store
    both lists for on-demand loading (see Step 5).
 
 ## Step 3: Present Summary
@@ -102,8 +102,8 @@ Show an "Available Repo Context" table:
 Add: "Repo context files will be loaded on demand when you work on a
 specific repo."
 
-**If `P.preset_docs` is non-empty:**
-Show a "Preset Docs" table:
+**If `P.domain_docs` is non-empty:**
+Show a "Domain Docs" table:
 
 ```
 | Doc | Path |
@@ -111,7 +111,7 @@ Show a "Preset Docs" table:
 | <name> | `<path>` |
 ```
 
-Add: "Preset docs available for deeper reference (architecture, debugging)."
+Add: "Domain docs available for deeper reference (architecture, debugging)."
 
 ## Step 4: Task Selection
 
@@ -141,8 +141,8 @@ them to the Reference Files table in CLAUDE.md."
 
 ## Step 5: Lazy Context Loading
 
-**Do NOT load repo context files or preset docs until needed.** You have
-the manifests from `P.repo_context_files` and `P.preset_docs` — use them
+**Do NOT load repo context files or domain docs until needed.** You have
+the manifests from `P.repo_context_files` and `P.domain_docs` — use them
 reactively:
 
 - When the user's query involves a specific repo, **read its context file
@@ -151,7 +151,7 @@ reactively:
   that point.
 - When the user's query involves cross-repo interactions, architecture
   understanding, or debugging on a live cluster, **load the relevant
-  preset doc** from `P.preset_docs`.
+  domain doc** from `P.domain_docs`.
 - If the user asks to "load all context", comply — but default to lazy.
 
 This keeps the context window lean for multi-repo projects where you

@@ -2,7 +2,7 @@
 
 A multi-repo workspace manager for AI-assisted development. Declare the repositories you need in a YAML manifest (`dev-env.yaml`), and this tool clones and organizes them, layers per-repo Claude context on top, and provides structured project workspaces for long-running tasks.
 
-Ships with a **preset system** for common development scenarios — start with a bundled preset (the included ones target OpenShift components) or build your own custom environment for any domain.
+Ships with a **domain system** for common development scenarios — start with a bundled domain (the included ones target OpenShift components) or build your own custom environment for any domain.
 
 ## Quick Start
 
@@ -16,38 +16,38 @@ cd my-workspace
 
 # 3. Run Claude Code and use the setup skill
 claude
-> /dev-env-setup              # Interactive — picks a preset or builds a custom config
+> /dev-env-setup              # Interactive — picks a domain or builds a custom config
 ```
 
-The `/dev-env-setup` skill walks you through everything: preset selection, repo cloning, context file distribution, and CLAUDE.md generation.
+The `/dev-env-setup` skill walks you through everything: domain selection, repo cloning, context file distribution, and CLAUDE.md generation.
 
 ## How It Works
 
 1. **`/dev-env-setup`** is the entry point — it orchestrates the entire initialization
-2. **Presets** (`presets/`) provide ready-made configs with documentation and per-repo context
+2. **Domains** (`domains/`) provide ready-made configs with documentation and per-repo context
 3. **`dev-env.yaml`** defines which repos to clone (name, URL, branch, category, summary)
 4. **`CLAUDE.md`** gives Claude Code cross-repo context for AI-assisted development
 5. **Projects** (`projects/`) give structured workspaces for specific tasks
 
 ### Setup Modes
 
-- **From preset** (`/dev-env-setup`) — select a preset, clone its repos, distribute context files
+- **From domain** (`/dev-env-setup`) — select a domain, clone its repos, distribute context files
 - **From scratch** (`/dev-env-setup custom`) — describe your project, add repos interactively, generate context collaboratively with Claude
 
-## Available Presets
+## Available Domains
 
-| Preset | Description |
+| Domain | Description |
 |--------|-------------|
 | `tnf` | Two Nodes with Fencing — OpenShift HA with Pacemaker/Corosync |
 | `lvm-operator` | LVM Operator (LVMS) — Local storage using LVM/TopoLVM for OpenShift |
 
-Create your own preset by adding a directory under `presets/` with a `preset.yaml`, `dev-env.yaml`, and optional `context/` and `docs/` directories.
+Create your own domain by adding a directory under `domains/` with a `domain.yaml`, `dev-env.yaml`, and optional `context/` and `docs/` directories.
 
 ## Claude Code Skills
 
 | Skill | Usage | Description |
 |-------|-------|-------------|
-| `/dev-env-setup` | Initialize or refresh dev environment | Set up from preset or custom repos |
+| `/dev-env-setup` | Initialize or refresh dev environment | Set up from domain or custom repos |
 | `/project:new` | Create a new project workspace | Structured workspace for a specific task |
 | `/project:resume` | Resume an existing project | Reload context and continue work |
 | `/project:close` | Close a completed project | Mark as done, add closing notes |

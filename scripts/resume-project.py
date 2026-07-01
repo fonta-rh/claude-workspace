@@ -194,14 +194,14 @@ def extract_checklist(text: str) -> dict:
     }
 
 
-def resolve_preset_context(preset: str, root: Path) -> dict:
-    """Resolve the preset's context file and docs directory."""
-    if not preset:
+def resolve_domain_context(domain: str, root: Path) -> dict:
+    """Resolve the domain's context file and docs directory."""
+    if not domain:
         return {"context_file": None, "docs": []}
-    preset_dir = root / "presets" / preset
-    ctx_file = preset_dir / "context.md"
+    domain_dir = root / "domains" / domain
+    ctx_file = domain_dir / "context.md"
     context_file = str(ctx_file.relative_to(root)) if ctx_file.is_file() else None
-    docs_dir = preset_dir / "docs"
+    docs_dir = domain_dir / "docs"
     docs = []
     if docs_dir.is_dir():
         docs = [
@@ -212,7 +212,7 @@ def resolve_preset_context(preset: str, root: Path) -> dict:
 
 
 def resolve_repo_context(repos: list[str], root: Path) -> list[dict[str, str]]:
-    """For each repo, find context files (repo CLAUDE.md and/or preset context)."""
+    """For each repo, find context files (repo CLAUDE.md and/or domain context)."""
     results = []
     for repo in repos:
         repo_claude = root / "repos" / repo / "CLAUDE.md"
@@ -223,12 +223,12 @@ def resolve_repo_context(repos: list[str], root: Path) -> list[dict[str, str]]:
                 "source": "repo",
             })
 
-        matches = glob.glob(str(root / "presets" / "*" / "context" / f"{repo}.md"))
+        matches = glob.glob(str(root / "domains" / "*" / "context" / f"{repo}.md"))
         if matches:
             results.append({
                 "repo": repo,
                 "path": str(Path(matches[0]).relative_to(root)),
-                "source": "preset",
+                "source": "domain",
             })
 
     return results
@@ -401,10 +401,12 @@ def resolve_project(arg: str | None, root: Path) -> dict:
     }
     repo_context = resolve_repo_context(repos_list, root)
 
-    preset = fm.get("preset", "")
-    if isinstance(preset, list):
-        preset = preset[0] if preset else ""
-    preset_ctx = resolve_preset_context(preset, root)
+    # Prefer the new `domain:` field; fall back to legacy `preset:` for
+    # projects created before the preset→domain rename.
+    domain = fm.get("domain") or fm.get("preset", "")
+    if isinstance(domain, list):
+        domain = domain[0] if domain else ""
+    domain_ctx = resolve_domain_context(domain, root)
 
     project_type = fm.get("type", "")
     if isinstance(project_type, list):
@@ -437,8 +439,8 @@ def resolve_project(arg: str | None, root: Path) -> dict:
             "unregistered_files": unregistered,
             "checklist": checklist,
             "repo_context_files": repo_context,
-            "preset_context": preset_ctx["context_file"],
-            "preset_docs": preset_ctx["docs"],
+            "domain_context": domain_ctx["context_file"],
+            "domain_docs": domain_ctx["docs"],
             "skill_suggestions": suggestions,
             "branch": branch,
             "worktree_repos": worktree_repos,

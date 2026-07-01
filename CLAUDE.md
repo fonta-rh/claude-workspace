@@ -5,12 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What This Repo Is
 
 A **multi-repo workspace manager for AI-assisted development**. It provides:
-- A preset system for bootstrapping dev environments (`presets/`)
+- A domain system for bootstrapping dev environments (`domains/`)
 - A setup script for cloning and managing repositories (`setup.sh`)
 - Project workspaces for structured task tracking (`projects/`)
 - Claude Code skills for common workflows (`.claude/skills/`)
 
-All source repositories are cloned into the `repos/` folder. Use `/dev-env-setup` to initialize from a preset, or create a custom `dev-env.yaml`.
+All source repositories are cloned into the `repos/` folder. Use `/dev-env-setup` to initialize from a domain, or create a custom `dev-env.yaml`.
 
 ## Source of Truth Priority
 
@@ -18,7 +18,7 @@ All source repositories are cloned into the `repos/` folder. Use `/dev-env-setup
 1. **Always look at repos in this workspace FIRST** before using internal knowledge or web searches
 2. If a component has a repo here, that repo is the **authoritative source of truth**
 3. Code in `repos/` reflects the latest development state, which may differ from public documentation
-4. Repos may contain a **`TNF-CONTEXT.md`** alongside their `CLAUDE.md` — this file describes the repo's role in the TNF ecosystem, key paths for TNF work, and cross-repo relationships. **Always read both files** when working in a repo
+4. Repos may contain a **`DOMAIN-CONTEXT.md`** alongside their `CLAUDE.md` — this file describes the repo's role in the TNF ecosystem, key paths for TNF work, and cross-repo relationships. **Always read both files** when working in a repo
 
 ## Fork Model
 
@@ -71,15 +71,15 @@ Projects that modify source repos use git worktrees for branch isolation, allowi
 
 | Skill | Usage | Description |
 |-------|-------|-------------|
-| `/dev-env-setup` | Initialize or refresh dev environment | Set up from preset or custom repos |
+| `/dev-env-setup` | Initialize or refresh dev environment | Set up from domain or custom repos |
 | `/project:new` | Create a new project workspace | Structured workspace for a specific task |
 | `/project:resume` | Resume an existing project | Reload context and continue work |
 | `/project:close` | Close a completed project | Mark as done, add closing notes |
 | `/project:update` | Update project docs from session | Record progress to project CLAUDE.md |
 
-## Preset Docs
+## Domain Docs
 
-For architecture details, debugging commands, and domain concepts, see the active preset's docs under `presets/<name>/`:
-- `presets/<name>/docs/` — Architecture diagrams, debugging guides, domain concepts
-- `presets/<name>/context/<repo>.md` — TNF context files (always distributed as `TNF-CONTEXT.md`)
-- `presets/<name>/supplemental/<repo>.md` — Supplemental `CLAUDE.md` for repos that don't have their own
+For architecture details, debugging commands, and domain concepts, see the active domain's docs under `domains/<name>/`:
+- `domains/<name>/docs/` — Architecture diagrams, debugging guides, domain concepts
+- `domains/<name>/context/<repo>.md` — TNF context files (always distributed as `DOMAIN-CONTEXT.md`)
+- `domains/<name>/supplemental/<repo>.md` — Supplemental `CLAUDE.md` for repos that don't have their own

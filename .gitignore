@@ -1,7 +1,7 @@
 # Cloned repositories directory
 repos/
 
-# User configuration (generated from preset or template)
+# User configuration (generated from domain or template)
 /dev-env.yaml
 
 # Editor/IDE files

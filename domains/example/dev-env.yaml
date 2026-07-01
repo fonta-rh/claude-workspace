@@ -1,0 +1,12 @@
+# Example Dev Environment
+# =======================
+#
+# A minimal domain showing the expected layout.
+# Replace this repo list with your team's repositories.
+
+repos:
+  - name: gitignore
+    url: https://github.com/github/gitignore.git
+    branch: main
+    category: docs
+    summary: "GitHub's collection of .gitignore templates — used as a minimal example repo"

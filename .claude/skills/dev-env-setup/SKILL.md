@@ -1,6 +1,6 @@
 ---
 name: dev-env-setup
-description: Initialize or refresh a dev environment from a preset or custom config
+description: Initialize or refresh a dev environment from a domain or custom config
 argument-hint: [setup|setup custom|<git-url>]
 user-invocable: true
 ---
@@ -16,58 +16,58 @@ and generating the root CLAUDE.md repo table.
 Parse `$ARGUMENTS` to determine the mode:
 
 - **`$ARGUMENTS` is a git URL** (starts with `https://`, `git@`, `ssh://`,
-  `git://`, or ends with `.git`): Follow [Mode A](#mode-a-from-preset),
-  but skip Step 1 — use the URL directly as the preset source.
+  `git://`, or ends with `.git`): Follow [Mode A](#mode-a-from-domain),
+  but skip Step 1 — use the URL directly as the domain source.
 - **`$ARGUMENTS` is empty, "setup", or starts with "setup "** (but NOT
-  "setup custom"): Follow [Mode A: From Preset](#mode-a-from-preset)
+  "setup custom"): Follow [Mode A: From Domain](#mode-a-from-domain)
 - **`$ARGUMENTS` is "setup custom" or starts with "setup custom "**:
   Follow [Mode B: From Scratch](#mode-b-from-scratch)
 
 ---
 
-## Mode A: From Preset
+## Mode A: From Domain
 
-### Step 0: Check for existing preset (refresh path)
+### Step 0: Check for existing domain (refresh path)
 
 Before presenting choices, check if `dev-env.yaml` already exists and
-contains a `preset:` block. If it does, read the `source` field:
-- If source is `bundled`: offer to refresh from the local preset files.
+contains a `domain:` block. If it does, read the `source` field:
+- If source is `bundled`: offer to refresh from the local domain files.
 - If source is a URL: offer to re-fetch from that URL.
 
 Use AskUserQuestion with options:
-- **"Re-initialize (keep current preset)"** — refresh from the recorded source
-- **"Choose a different preset"** — continue to Step 1
+- **"Re-initialize (keep current domain)"** — refresh from the recorded source
+- **"Choose a different domain"** — continue to Step 1
 
 If `dev-env.yaml` does not exist, skip this step and go to Step 1.
 
-### Step 1: Select Preset
+### Step 1: Select Domain
 
 **If `$ARGUMENTS` is a git URL**, skip the question — use that URL as the
-preset source and go straight to Step 2.
+domain source and go straight to Step 2.
 
-Otherwise, list available presets by scanning the `presets/` directory.
-For each subdirectory, read `preset.yaml` to get name and description.
+Otherwise, list available domains by scanning the `domains/` directory.
+For each subdirectory, read `domain.yaml` to get name and description.
 
-Present the presets to the user via AskUserQuestion with the following options:
-- One option per bundled preset (name + description)
-- An additional option: **"External preset (git URL)"**
+Present the domains to the user via AskUserQuestion with the following options:
+- One option per bundled domain (name + description)
+- An additional option: **"External domain (git URL)"**
 
-If the user selects "External preset", ask them to provide the git URL.
-The URL may include a `#subdir` fragment for packs that contain multiple presets
-(e.g., `https://github.com/org/presets.git#myteam`).
+If the user selects "External domain", ask them to provide the git URL.
+The URL may include a `#subdir` fragment for packs that contain multiple domains
+(e.g., `https://github.com/org/domains.git#myteam`).
 
-If only one bundled preset exists, suggest it as the default but still confirm.
+If only one bundled domain exists, suggest it as the default but still confirm.
 
 ### Step 2: Initialize
 
-Run `./setup.sh init <preset-name-or-url>` via Bash. This:
-- For bundled presets: copies `dev-env.yaml` to the root.
+Run `./setup.sh init <domain-name-or-url>` via Bash. This:
+- For bundled domains: copies `dev-env.yaml` to the root.
 - For external URLs: shallow-clones the pack, validates the layout,
-  installs it into `presets/<name>/`, then copies `dev-env.yaml`.
-- In both cases: records the preset source in `dev-env.yaml` and copies
+  installs it into `domains/<name>/`, then copies `dev-env.yaml`.
+- In both cases: records the domain source in `dev-env.yaml` and copies
   `settings.local.json.tpl` if `.claude/settings.local.json` doesn't exist.
 
-If refreshing (Step 0 chose refresh), run `./setup.sh refresh-preset` instead.
+If refreshing (Step 0 chose refresh), run `./setup.sh refresh-domain` instead.
 
 ### Step 3: Clone Repos
 
@@ -75,22 +75,23 @@ Run `./setup.sh clone` via Bash to clone all repos defined in
 `dev-env.yaml`. This may take a while for large repos — let the user
 know.
 
-### Step 4: Distribute Context Files
+### Step 4: Verify Distributed Context Files
 
-For each repo defined in the preset's `dev-env.yaml`:
+`./setup.sh clone` (Step 3) already distributes the active domain's files
+as part of each repo clone. For each repo, `clone_repo` does the following
+from `domains/<domain>/`:
 
-1. Check if `repos/<repo-name>/CLAUDE.md` already exists (native
-   CLAUDE.md from the repo itself)
-2. If **no native CLAUDE.md exists** and
-   `presets/<preset>/context/<repo-name>.md` exists:
-   - Copy the context file to `repos/<repo-name>/CLAUDE.md`
-   - This gives Claude repo-specific context when working in that directory
-3. If a **native CLAUDE.md already exists**:
-   - Do NOT overwrite it — the repo's own CLAUDE.md takes priority
-   - The preset's context file remains in `presets/<preset>/context/`
-     and can be loaded on demand by the `/project` skill
+1. **Context** — if `context/<repo-name>.md` exists, it is copied to
+   `repos/<repo-name>/DOMAIN-CONTEXT.md` **always** (even when the repo has
+   its own native CLAUDE.md). This is the repo's role-in-the-domain context,
+   read alongside CLAUDE.md.
+2. **Supplemental CLAUDE.md** — if `supplemental/<repo-name>.md` exists and
+   the repo has **no native `CLAUDE.md`**, it is copied to
+   `repos/<repo-name>/CLAUDE.md`. A native CLAUDE.md is never overwritten.
 
-Log which repos got supplemental CLAUDE.md files and which were skipped.
+No manual copying is needed here — just confirm the files landed and log
+which repos got a `DOMAIN-CONTEXT.md`, which got a supplemental `CLAUDE.md`,
+and which kept their native `CLAUDE.md`.
 
 ### Step 5: Generate Root CLAUDE.md Repo Table
 
@@ -111,7 +112,7 @@ Present a summary to the user:
 - Number of repos cloned
 - Which repos got supplemental CLAUDE.md files
 - Which repos already had native CLAUDE.md files (skipped)
-- Pointer to preset docs (`presets/<preset>/docs/`) if the directory exists
+- Pointer to domain docs (`domains/<domain>/docs/`) if the directory exists
 - Suggest next steps: `/project:new` to start a task
 
 ---
@@ -256,11 +257,11 @@ Show the user what was set up:
 - Always use the Write tool to create/modify files, not Bash echo/cat
 - Use Bash tool only for `./setup.sh` commands and `mkdir -p`
 - The `dev-env.yaml` file is gitignored (user-specific config)
-- Preset context files in `presets/<preset>/context/` are committed to
+- Domain context files in `domains/<domain>/context/` are committed to
   the repo and shared across the team
 - When copying context files to `repos/<name>/CLAUDE.md`, those copies
   are gitignored via the `repos/` entry in `.gitignore`
-- External preset directories under `presets/<name>/` are gitignored via
+- External domain directories under `domains/<name>/` are gitignored via
   `.git/info/exclude` (local-only, not committed)
 - Dispatch Explore agents in parallel (single message with multiple Task
   tool calls) for efficiency during Mode B Step 5b

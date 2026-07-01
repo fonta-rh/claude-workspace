@@ -51,7 +51,7 @@ the repo list** from `dev-env.yaml` at the workspace root:
 
 1. Read `dev-env.yaml` and extract each repo's `name` and `summary`
    fields from the `repos:` array. Also extract the top-level
-   `preset:` field if present (e.g., `preset: tnf`).
+   `domain:` field if present (e.g., `domain: tnf`).
 2. Build AskUserQuestion options with multiSelect=true, using
    `name` as the label and `summary` as the description.
 3. If `dev-env.yaml` does not exist or has no repos, skip this step
@@ -257,7 +257,7 @@ type: <bug|feature|ci-testing|docs|analysis>
 created: <YYYY-MM-DD>
 status: active
 jira: <URL or "none">
-preset: <preset name from dev-env.yaml, or omit if none>
+domain: <domain name from dev-env.yaml, or omit if none>
 repos:
   - <repo1>
   - <repo2>
@@ -419,7 +419,7 @@ _Root cause goes here once identified._
 
 When populating this file:
 - For each selected repo, check `repos/<repo>/CLAUDE.md` or
-  `presets/*/context/<repo>.md` for "Key paths", "Key files",
+  `domains/*/context/<repo>.md` for "Key paths", "Key files",
   or similar sections.
 - If found, add 1-3 most relevant paths to the table.
 - If not found, add the repo name with an empty path and a TODO
@@ -496,7 +496,7 @@ _Analysis results._
 ## Important Notes
 
 - **Use absolute paths for ALL Bash commands.** Compute the workspace
-  root once (e.g., `/home/<user>/Workspace/tnf-dev-env`) and prefix
+  root once (e.g., `/home/<user>/Workspace/my-workspace`) and prefix
   every `repos/`, `projects/`, and `git -C` path with it. Shell state
   does not persist between Bash tool calls, so relative paths break
   when a prior command changes the working directory.
