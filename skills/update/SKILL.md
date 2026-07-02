@@ -1,4 +1,5 @@
 ---
+name: update
 description: Update project documentation from what was accomplished in this session
 argument-hint: [name-or-number]
 ---
@@ -10,11 +11,12 @@ current conversation. Apply edits directly.
 
 ## Scope Rules
 
-**Update:** files under `projects/<name>/` — CLAUDE.md (index, checklists,
-progress) and detail files (investigation notes, test results, plans, etc.).
+**Update:** files under `projects/<name>/` in the workspace — CLAUDE.md
+(index, checklists, progress) and detail files (investigation notes, test
+results, plans, etc.).
 
 **NEVER touch during this command:**
-- The `status:` frontmatter field — use `/project:close` to change it
+- The `status:` frontmatter field — use `/workspace:close` to change it
 - Memory files (`memory/MEMORY.md`, `memory/project_*.md`)
 - Internal session tasks (TaskCreate / TaskUpdate)
 - Repo source files under `repos/`
@@ -22,7 +24,7 @@ progress) and detail files (investigation notes, test results, plans, etc.).
 ## Step 1: Resolve Project
 
 Use the project already loaded in this conversation (from
-`/project:resume` or any earlier project interaction). If `$ARGUMENTS`
+`/workspace:resume` or any earlier project interaction). If `$ARGUMENTS`
 has a token, use that as the project name instead.
 
 If no project is in context and no argument was given, ask which project.

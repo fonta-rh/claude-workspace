@@ -1,16 +1,35 @@
 ---
-description: Create a new project workspace for a development task
+name: new
+description: Create a new project workspace for a development task (bug, feature, CI, docs, analysis)
 argument-hint: [description]
 ---
 
 # New Project Workspace
 
 You are helping a developer create a new project workspace. Projects live
-under the `projects/` directory and provide structured working environments
-for specific tasks (bug investigations, feature development, CI work, etc.).
+under the `projects/` directory in the workspace and provide structured
+working environments for specific tasks (bug investigations, feature
+development, CI work, etc.).
 
-Everything after "new" in `$ARGUMENTS` is an optional initial description
-of the task.
+Everything after the skill name in `$ARGUMENTS` is an optional initial
+description of the task.
+
+## Step 0: Resolve the Workspace Root
+
+The **workspace root** `$WS` is the directory where `dev-env.yaml`,
+`repos/`, and `projects/` live — the directory Claude Code was launched in.
+Determine it once and reuse it:
+
+1. If `$CLAUDE_PROJECT_DIR` is set, use it.
+2. Otherwise, use the nearest ancestor of the current directory that
+   contains `dev-env.yaml`.
+3. If neither resolves (e.g., the workspace hasn't been set up), tell the
+   user to run `/workspace:setup-environment` first, or ask them for the
+   workspace path.
+
+**Prefix every `projects/`, `repos/`, and `git -C` path below with `$WS`.**
+Shell state does not persist between Bash tool calls, so always use the
+absolute `$WS/...` form rather than relative paths.
 
 ## Step 1: Gather Task Information
 
@@ -20,8 +39,8 @@ descriptions.
 
 **1a. Task Description**
 
-If the user provided a description after "new" in the arguments, use that.
-Otherwise, ask:
+If the user provided a description in the arguments, use that. Otherwise,
+ask:
 
 > "What task are you working on? Please describe it in a sentence or two."
 
@@ -47,14 +66,14 @@ say 'no'."
 **1d. Related Repositories**
 
 Ask which repos from this workspace are relevant. **Dynamically load
-the repo list** from `dev-env.yaml` at the workspace root:
+the repo list** from `$WS/dev-env.yaml`:
 
-1. Read `dev-env.yaml` and extract each repo's `name` and `summary`
+1. Read `$WS/dev-env.yaml` and extract each repo's `name` and `summary`
    fields from the `repos:` array. Also extract the top-level
    `domain:` field if present (e.g., `domain: tnf`).
 2. Build AskUserQuestion options with multiSelect=true, using
    `name` as the label and `summary` as the description.
-3. If `dev-env.yaml` does not exist or has no repos, skip this step
+3. If `$WS/dev-env.yaml` does not exist or has no repos, skip this step
    and note that no repos are configured (the user can add them
    later by editing the project's CLAUDE.md frontmatter).
 
@@ -87,15 +106,15 @@ selected in Step 1d:
 
    ```bash
    # Ensure .worktrees/ is excluded from git tracking
-   grep -qF '.worktrees' repos/<repo>/.git/info/exclude 2>/dev/null \
-     || echo '.worktrees/' >> repos/<repo>/.git/info/exclude
+   grep -qF '.worktrees' "$WS/repos/<repo>/.git/info/exclude" 2>/dev/null \
+     || echo '.worktrees/' >> "$WS/repos/<repo>/.git/info/exclude"
 
    # Determine the default branch (main or master)
-   default_branch=$(git -C repos/<repo> symbolic-ref refs/remotes/origin/HEAD \
+   default_branch=$(git -C "$WS/repos/<repo>" symbolic-ref refs/remotes/origin/HEAD \
      2>/dev/null | sed 's|refs/remotes/origin/||')
    if [ -z "$default_branch" ]; then
      for candidate in main master; do
-       if git -C repos/<repo> rev-parse --verify "origin/$candidate" \
+       if git -C "$WS/repos/<repo>" rev-parse --verify "origin/$candidate" \
          >/dev/null 2>&1; then
          default_branch="$candidate"; break
        fi
@@ -103,7 +122,7 @@ selected in Step 1d:
    fi
 
    # Create the worktree
-   git -C repos/<repo> worktree add \
+   git -C "$WS/repos/<repo>" worktree add \
      .worktrees/<branch> -b <branch> origin/$default_branch
    ```
 
@@ -127,10 +146,10 @@ Extract the repo and PR number, then create a worktree:
 2. Fetch and create a worktree for the PR:
 
    ```bash
-   grep -qF '.worktrees' repos/<repo>/.git/info/exclude 2>/dev/null \
-     || echo '.worktrees/' >> repos/<repo>/.git/info/exclude
-   git -C repos/<repo> fetch origin pull/<number>/head:pr/<number>
-   git -C repos/<repo> worktree add .worktrees/pr/<number> pr/<number>
+   grep -qF '.worktrees' "$WS/repos/<repo>/.git/info/exclude" 2>/dev/null \
+     || echo '.worktrees/' >> "$WS/repos/<repo>/.git/info/exclude"
+   git -C "$WS/repos/<repo>" fetch origin pull/<number>/head:pr/<number>
+   git -C "$WS/repos/<repo>" worktree add .worktrees/pr/<number> pr/<number>
    ```
 
 3. Store `branch: pr/<number>` and the repo in worktrees list.
@@ -145,10 +164,10 @@ Based on the gathered information:
 2. Otherwise, generate a kebab-case slug from the task description
    (e.g., "Fix kubelet start timeout after fencing" becomes
    `fix-kubelet-start-timeout`). Keep it under 40 characters.
-3. **Check if `projects/<suggestion>/` already exists** using ls. If it
+3. **Check if `$WS/projects/<suggestion>/` already exists** using ls. If it
    does, inform the user and ask:
    - Use a different name (suggest appending `-2`, `-3`, etc.)
-   - Resume the existing project instead (point them to `/project:resume`)
+   - Resume the existing project instead (point them to `/workspace:resume`)
 4. Once you have a name that doesn't conflict, present the suggestion
    and ask the user to confirm or provide an alternative:
 
@@ -162,7 +181,7 @@ Create the project directory and generate files based on the task type.
 **3a. Create directory structure**
 
 Use the Bash tool to create directories. The base is always
-`projects/<folder-name>/`.
+`$WS/projects/<folder-name>/`.
 
 Additional subdirectories by type:
 
@@ -177,7 +196,7 @@ Additional subdirectories by type:
 **3b. Generate CLAUDE.md (lean index)**
 
 Write a **lean index** CLAUDE.md (~50-80 lines) at
-`projects/<folder-name>/CLAUDE.md` using the Write tool. This file is
+`$WS/projects/<folder-name>/CLAUDE.md` using the Write tool. This file is
 an index, not a document — it orients Claude on what the project is and
 where to look. All detailed content goes into separate files (Step 3d).
 
@@ -186,7 +205,7 @@ The content MUST follow the lean template for the detected type
 
 **3c. Generate .gitignore**
 
-Write a `.gitignore` at `projects/<folder-name>/.gitignore` with:
+Write a `.gitignore` at `$WS/projects/<folder-name>/.gitignore` with:
 
 ```
 # Large files that shouldn't be committed
@@ -219,10 +238,10 @@ After creating the project, provide a summary:
 1. List the files and directories created
 2. If worktrees were created, list them with their paths:
    > **Worktrees created:**
-   > - `repos/<repo>/.worktrees/<branch>/` → branch `<branch>`
+   > - `$WS/repos/<repo>/.worktrees/<branch>/` → branch `<branch>`
    >
    > When working on code changes, use the worktree paths above
-   > instead of the main checkout (`repos/<repo>/`).
+   > instead of the main checkout (`$WS/repos/<repo>/`).
 3. Suggest relevant skills based on the task type:
 
 | Type | Skills to suggest |
@@ -235,7 +254,7 @@ After creating the project, provide a summary:
 
 4. Suggest concrete next steps for starting the work
 5. Remind the user they can resume this project later with
-   `/project:resume`
+   `/workspace:resume`
 
 ---
 
@@ -248,7 +267,7 @@ when resuming the project.
 
 ### Common Frontmatter
 
-Valid `status` values: `active`, `blocked`, `done` (set only by `/project:close`).
+Valid `status` values: `active`, `blocked`, `done` (set only by `/workspace:close`).
 
 ```yaml
 ---
@@ -300,7 +319,7 @@ these sections in order:
 5. **`## Progress`** — high-level checklist starting with
    `- [x] Project created`, then type-specific milestone items
    (see below, all unchecked). Stays in CLAUDE.md because
-   `/project:resume` reads it to suggest next steps.
+   `/workspace:resume` reads it to suggest next steps.
 
 ### Type-Specific Content
 
@@ -418,8 +437,8 @@ _Root cause goes here once identified._
 ```
 
 When populating this file:
-- For each selected repo, check `repos/<repo>/CLAUDE.md` or
-  `domains/*/context/<repo>.md` for "Key paths", "Key files",
+- For each selected repo, check `$WS/repos/<repo>/CLAUDE.md` or
+  `<domain>/context/<repo>.md` for "Key paths", "Key files",
   or similar sections.
 - If found, add 1-3 most relevant paths to the table.
 - If not found, add the repo name with an empty path and a TODO
@@ -495,16 +514,14 @@ _Analysis results._
 
 ## Important Notes
 
-- **Use absolute paths for ALL Bash commands.** Compute the workspace
-  root once (e.g., `/home/<user>/Workspace/my-workspace`) and prefix
-  every `repos/`, `projects/`, and `git -C` path with it. Shell state
-  does not persist between Bash tool calls, so relative paths break
-  when a prior command changes the working directory.
+- **Use the absolute `$WS/...` form for ALL Bash commands** (see Step 0).
+  Shell state does not persist between Bash tool calls, so relative paths
+  break when a prior command changes the working directory.
 - Always use the Write tool to create files, never echo/cat via Bash
 - Use Bash tool only for `mkdir -p` to create directories
 - After creating the project, briefly list what was created and what
   the user should do next
-- If the user provides enough context in the initial `/project:new`
-  arguments, minimize questions — only ask what's truly missing
+- If the user provides enough context in the initial arguments, minimize
+  questions — only ask what's truly missing
 - The YAML frontmatter `status` field should always start as `active`
 - Use today's date for the `created` field

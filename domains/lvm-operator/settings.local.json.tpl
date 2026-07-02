@@ -50,21 +50,7 @@
       "WebFetch(domain:prow.ci.openshift.org)",
       "WebFetch(domain:issues.redhat.com)",
       "WebSearch",
-      "Skill(project:new)",
-      "Skill(project:resume)",
-      "Skill(dev-env-setup)"
-    ]
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/recent-projects.py"
-          }
-        ]
-      }
+      "Skill(workspace:*)"
     ]
   }
 }

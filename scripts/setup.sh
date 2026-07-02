@@ -1,29 +1,48 @@
 #!/bin/bash
 #
-# Dev Environment Setup Script
-# ============================
+# Workspace Setup Script (workspace plugin)
+# =========================================
+#
+# Ships inside the plugin and self-derives its plugin root. Operates on a
+# user-chosen *workspace root* (where dev-env.yaml, repos/, projects/, and
+# workspace-local domains/ live), passed via --workspace or resolved from the
+# environment / current directory.
 #
 # Usage:
-#   ./setup.sh              # Clone all repos (first time setup)
-#   ./setup.sh clone        # Clone all repos
-#   ./setup.sh update       # Update all repos (git pull)
-#   ./setup.sh clone <dir>  # Clone specific repo by directory name
-#   ./setup.sh update <dir> # Update specific repo by directory name
-#   ./setup.sh status       # Show status of all repos
-#   ./setup.sh list         # List configured repos
-#   ./setup.sh init <name>            # Initialize from a bundled domain
-#   ./setup.sh init <url>             # Initialize from an external domain git URL
-#   ./setup.sh init <url#subdir>      # External pack repo containing multiple domains
-#   ./setup.sh refresh-domain         # Re-fetch domain from its recorded source
+#   setup.sh --workspace <path> init <name>       Initialize from a bundled domain
+#   setup.sh --workspace <path> init <url>        Initialize from an external domain git URL
+#   setup.sh --workspace <path> init <url#subdir> External pack repo with multiple domains
+#   setup.sh --workspace <path> clone             Clone all repos (first time setup)
+#   setup.sh --workspace <path> clone <dir>       Clone a specific repo by directory name
+#   setup.sh --workspace <path> update            Update all repos (git pull)
+#   setup.sh --workspace <path> update <dir>      Update a specific repo by directory name
+#   setup.sh --workspace <path> status            Show status of all repos
+#   setup.sh --workspace <path> list              List configured repos
+#   setup.sh --workspace <path> refresh-domain    Re-fetch domain from its recorded source
+#
+# --workspace may be omitted when WORKSPACE_ROOT / CLAUDE_PROJECT_DIR is set,
+# or when run from inside a workspace (a directory containing dev-env.yaml).
 #
 
 set -e
 
+# ─── Plugin root (self-derived) ───────────────────────────────────────────────
+# This script lives at <plugin>/scripts/setup.sh, so the plugin root is one
+# level up. Bundled domains and templates ship alongside it (read-only).
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPOS_DIR="$SCRIPT_DIR/repos"
-DEV_ENV_YAML="$SCRIPT_DIR/dev-env.yaml"
-DEV_ENV_TEMPLATE="$SCRIPT_DIR/dev-env.yaml.template"
-DOMAINS_DIR="$SCRIPT_DIR/domains"
+PLUGIN_ROOT="$(dirname "$SCRIPT_DIR")"
+BUNDLED_DOMAINS_DIR="$PLUGIN_ROOT/domains"
+TEMPLATES_DIR="$PLUGIN_ROOT/templates"
+
+# ─── Workspace root (resolved at runtime) ─────────────────────────────────────
+# Populated by resolve_workspace_root(); everything mutable hangs off it.
+
+WS_FLAG=""
+WORKSPACE_ROOT_RESOLVED=""
+REPOS_DIR=""
+DEV_ENV_YAML=""
+WORKSPACE_DOMAINS_DIR=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,6 +55,99 @@ log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Turn a path into an absolute one without requiring it to exist.
+abspath() {
+    local p="$1"
+    if [[ -d "$p" ]]; then
+        (cd "$p" && pwd)
+    elif [[ "$p" = /* ]]; then
+        echo "$p"
+    else
+        echo "$PWD/$p"
+    fi
+}
+
+# ─── Workspace Root Resolution ─────────────────────────────────────────────────
+# Order: --workspace flag → WORKSPACE_ROOT env → CLAUDE_PROJECT_DIR env →
+# walk up from $PWD to the nearest dir containing dev-env.yaml.
+#
+# $1 = mode: "create" tolerates a not-yet-existing workspace (used by init);
+#            "require" (default) errors when no workspace can be determined.
+# Sets WORKSPACE_ROOT_RESOLVED, REPOS_DIR, DEV_ENV_YAML, WORKSPACE_DOMAINS_DIR.
+resolve_workspace_root() {
+    local mode="${1:-require}"
+    local ws=""
+
+    if [[ -n "$WS_FLAG" ]]; then
+        ws="$WS_FLAG"
+    elif [[ -n "${WORKSPACE_ROOT:-}" ]]; then
+        ws="$WORKSPACE_ROOT"
+    elif [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
+        ws="$CLAUDE_PROJECT_DIR"
+    else
+        local dir="$PWD"
+        while :; do
+            if [[ -f "$dir/dev-env.yaml" ]]; then
+                ws="$dir"
+                break
+            fi
+            [[ "$dir" == "/" ]] && break
+            dir="$(dirname "$dir")"
+        done
+    fi
+
+    if [[ -z "$ws" ]]; then
+        if [[ "$mode" == "create" ]]; then
+            ws="$PWD"
+        else
+            log_error "Could not determine the workspace root."
+            log_info "Pass --workspace <path>, set WORKSPACE_ROOT, or run from inside"
+            log_info "a workspace (a directory containing dev-env.yaml)."
+            exit 1
+        fi
+    fi
+
+    WORKSPACE_ROOT_RESOLVED="$(abspath "$ws")"
+    REPOS_DIR="$WORKSPACE_ROOT_RESOLVED/repos"
+    DEV_ENV_YAML="$WORKSPACE_ROOT_RESOLVED/dev-env.yaml"
+    WORKSPACE_DOMAINS_DIR="$WORKSPACE_ROOT_RESOLVED/domains"
+}
+
+# Locate a domain directory by name: workspace domains/ first, then bundled.
+# Echoes the path, or nothing if the domain is not found.
+find_domain_dir() {
+    local name="$1"
+    [[ -z "$name" ]] && return 0
+    if [[ -d "$WORKSPACE_DOMAINS_DIR/$name" ]]; then
+        echo "$WORKSPACE_DOMAINS_DIR/$name"
+    elif [[ -d "$BUNDLED_DOMAINS_DIR/$name" ]]; then
+        echo "$BUNDLED_DOMAINS_DIR/$name"
+    fi
+}
+
+# List available domains (workspace + bundled), workspace shadowing bundled,
+# each tagged with its source. Portable (no bash-4 associative arrays).
+list_available_domains() {
+    local seen=" "
+    local pair dirpath label domain_dir name desc
+    for pair in "$WORKSPACE_DOMAINS_DIR|workspace" "$BUNDLED_DOMAINS_DIR|bundled"; do
+        dirpath="${pair%%|*}"
+        label="${pair##*|}"
+        [[ -d "$dirpath" ]] || continue
+        for domain_dir in "$dirpath"/*/; do
+            [[ -d "$domain_dir" ]] || continue
+            name="$(basename "$domain_dir")"
+            case "$seen" in *" $name "*) continue;; esac
+            seen="$seen$name "
+            desc=""
+            if [[ -f "$domain_dir/domain.yaml" ]]; then
+                desc=$(grep '^description:' "$domain_dir/domain.yaml" | sed 's/^description: *"*//;s/"*$//')
+            fi
+            printf "  %-15s %-48s (%s)\n" "$name" "$desc" "$label"
+        done
+    done
+}
 
 # ─── YAML Parsing ─────────────────────────────────────────────────────────────
 # Parse dev-env.yaml into pipe-separated lines: url|directory|branch|name|category|summary
@@ -118,11 +230,10 @@ detect_repo_source() {
         domain_info=$(parse_yaml_domain "$DEV_ENV_YAML")
         ACTIVE_DOMAIN_NAME="${domain_info%%|*}"
     else
-        log_error "No repo configuration found!"
+        log_error "No dev-env.yaml found in workspace: $WORKSPACE_ROOT_RESOLVED"
         log_info "Options:"
-        log_info "  ./setup.sh init <domain>  — Initialize from a bundled domain"
-        log_info "  ./setup.sh init <url>     — Initialize from an external domain git URL"
-        log_info "  cp dev-env.yaml.template dev-env.yaml  — Start from template"
+        log_info "  setup.sh --workspace $WORKSPACE_ROOT_RESOLVED init <domain>  — from a bundled domain"
+        log_info "  setup.sh --workspace $WORKSPACE_ROOT_RESOLVED init <url>     — from an external domain git URL"
         exit 1
     fi
 }
@@ -145,6 +256,57 @@ iterate_repos() {
 
 # ─── Clone / Update ──────────────────────────────────────────────────────────
 
+# Distribute the active domain's context/supplemental files into a cloned repo.
+distribute_domain_files() {
+    local dir="$1"
+    local target="$2"
+
+    # Scope to the active domain when known — prevents collisions when multiple
+    # installed domains contain files for a same-named repository.
+    if [[ -n "$ACTIVE_DOMAIN_NAME" ]]; then
+        local domain_base
+        domain_base="$(find_domain_dir "$ACTIVE_DOMAIN_NAME")"
+        if [[ -n "$domain_base" && -d "$domain_base" ]]; then
+            if [[ -f "$domain_base/context/$dir.md" ]]; then
+                cp "$domain_base/context/$dir.md" "$target/DOMAIN-CONTEXT.md"
+                log_info "  Added DOMAIN-CONTEXT.md"
+            fi
+            if [[ ! -f "$target/CLAUDE.md" && -f "$domain_base/supplemental/$dir.md" ]]; then
+                cp "$domain_base/supplemental/$dir.md" "$target/CLAUDE.md"
+                log_info "  Added supplemental CLAUDE.md"
+            fi
+            return 0
+        fi
+    fi
+
+    # Fallback for dev-env.yaml files without domain tracking: search workspace
+    # domains first, then bundled.
+    local base ctx sup
+    for base in "$WORKSPACE_DOMAINS_DIR" "$BUNDLED_DOMAINS_DIR"; do
+        [[ -d "$base" ]] || continue
+        for ctx in "$base"/*/context/"$dir".md; do
+            if [[ -f "$ctx" ]]; then
+                cp "$ctx" "$target/DOMAIN-CONTEXT.md"
+                log_info "  Added DOMAIN-CONTEXT.md"
+                break 2
+            fi
+        done
+    done
+
+    if [[ ! -f "$target/CLAUDE.md" ]]; then
+        for base in "$WORKSPACE_DOMAINS_DIR" "$BUNDLED_DOMAINS_DIR"; do
+            [[ -d "$base" ]] || continue
+            for sup in "$base"/*/supplemental/"$dir".md; do
+                if [[ -f "$sup" ]]; then
+                    cp "$sup" "$target/CLAUDE.md"
+                    log_info "  Added supplemental CLAUDE.md"
+                    break 2
+                fi
+            done
+        done
+    fi
+}
+
 # Clone a single repository (blobless clone for faster downloads)
 clone_repo() {
     local url="$1"
@@ -164,41 +326,7 @@ clone_repo() {
     git clone --filter=blob:none --branch "$branch" "$url" "$target"
     log_success "Cloned $dir (branch: $branch)"
 
-    # Distribute context/supplemental files from the active domain only.
-    # Scoping to the active domain prevents collisions when multiple installed
-    # domains contain files for a same-named repository.
-    if [[ -n "$ACTIVE_DOMAIN_NAME" && -d "$DOMAINS_DIR/$ACTIVE_DOMAIN_NAME" ]]; then
-        local domain_base="$DOMAINS_DIR/$ACTIVE_DOMAIN_NAME"
-
-        if [[ -f "$domain_base/context/$dir.md" ]]; then
-            cp "$domain_base/context/$dir.md" "$target/DOMAIN-CONTEXT.md"
-            log_info "  Added DOMAIN-CONTEXT.md"
-        fi
-
-        if [[ ! -f "$target/CLAUDE.md" && -f "$domain_base/supplemental/$dir.md" ]]; then
-            cp "$domain_base/supplemental/$dir.md" "$target/CLAUDE.md"
-            log_info "  Added supplemental CLAUDE.md"
-        fi
-    else
-        # Fallback for dev-env.yaml files that predate source tracking
-        for ctx in "$DOMAINS_DIR"/*/context/"$dir".md; do
-            if [[ -f "$ctx" ]]; then
-                cp "$ctx" "$target/DOMAIN-CONTEXT.md"
-                log_info "  Added DOMAIN-CONTEXT.md"
-                break
-            fi
-        done
-
-        if [[ ! -f "$target/CLAUDE.md" ]]; then
-            for sup in "$DOMAINS_DIR"/*/supplemental/"$dir".md; do
-                if [[ -f "$sup" ]]; then
-                    cp "$sup" "$target/CLAUDE.md"
-                    log_info "  Added supplemental CLAUDE.md"
-                    break
-                fi
-            done
-        fi
-    fi
+    distribute_domain_files "$dir" "$target"
 }
 
 # Update a single repository
@@ -221,7 +349,7 @@ update_repo() {
     fi
 
     git pull --rebase
-    cd "$SCRIPT_DIR"
+    cd "$WORKSPACE_ROOT_RESOLVED"
 
     log_success "Updated $dir"
 }
@@ -300,7 +428,7 @@ show_status() {
             status="${GREEN}cloned${NC}"
             branch_info="$(git branch --show-current 2>/dev/null || echo 'detached')"
             last_commit="$(git log -1 --format='%h %s' 2>/dev/null | cut -c1-40)"
-            cd "$REPOS_DIR"
+            cd "$WORKSPACE_ROOT_RESOLVED"
         else
             status="${YELLOW}not cloned${NC}"
             branch_info="-"
@@ -390,7 +518,7 @@ is_git_url() {
 
 # ─── External Domain Fetching ─────────────────────────────────────────────────
 
-# Clone an external domain pack into domains/<name>/.
+# Clone an external domain pack into the workspace's domains/<name>/.
 # Sets FETCHED_DOMAIN_NAME to the installed domain name.
 FETCHED_DOMAIN_NAME=""
 
@@ -433,7 +561,7 @@ fetch_external_domain() {
         domain_name="${subdir:-$(basename "${url%.git}")}"
     fi
 
-    local dest="$DOMAINS_DIR/$domain_name"
+    local dest="$WORKSPACE_DOMAINS_DIR/$domain_name"
     if [[ -d "$dest" ]]; then
         log_warn "Domain '$domain_name' already installed at domains/$domain_name/"
         read -rp "Overwrite? [y/N] " answer
@@ -448,15 +576,6 @@ fetch_external_domain() {
     mkdir -p "$dest"
     cp -r "$pack_dir/." "$dest/"
     rm -rf "$dest/.git"
-
-    # Record in local git exclude so the external domain is not tracked by this repo
-    local exclude_file="$SCRIPT_DIR/.git/info/exclude"
-    if [[ -f "$exclude_file" ]]; then
-        local ignore_pattern="domains/$domain_name/"
-        if ! grep -qF "$ignore_pattern" "$exclude_file" 2>/dev/null; then
-            echo "$ignore_pattern" >> "$exclude_file"
-        fi
-    fi
 
     rm -rf "$tmp_dir"
     log_success "Installed domain '$domain_name' from $url"
@@ -514,8 +633,8 @@ PYEOF
 
 # ─── Settings Merge ──────────────────────────────────────────────────────────
 # Merge a settings template into an existing settings.local.json.
-# Adds missing top-level keys (e.g. hooks) and appends new permissions.allow
-# entries without overwriting existing values.
+# Appends new permissions.allow entries and adds missing top-level keys
+# without overwriting existing values.
 
 merge_settings_template() {
     local target="$1"
@@ -548,7 +667,7 @@ if "permissions" in template and "allow" in template["permissions"]:
             target["permissions"]["allow"].append(entry)
             changed.append(f"  + permission: {entry}")
 
-# Merge top-level keys that don't exist in target (hooks, env, etc.)
+# Merge top-level keys that don't exist in target (env, etc.)
 for key in template:
     if key == "permissions":
         continue
@@ -574,6 +693,30 @@ PYEOF
     fi
 }
 
+# Copy or merge the settings template into the workspace's .claude/settings.local.json.
+apply_settings_template() {
+    local domain_dir="$1"
+
+    local settings_dir="$WORKSPACE_ROOT_RESOLVED/.claude"
+    local settings_file="$settings_dir/settings.local.json"
+    local settings_tpl=""
+    if [[ -f "$domain_dir/settings.local.json.tpl" ]]; then
+        settings_tpl="$domain_dir/settings.local.json.tpl"
+    elif [[ -f "$TEMPLATES_DIR/settings.local.json.tpl" ]]; then
+        settings_tpl="$TEMPLATES_DIR/settings.local.json.tpl"
+    fi
+
+    if [[ -z "$settings_tpl" ]]; then
+        : # no template available
+    elif [[ ! -f "$settings_file" ]]; then
+        mkdir -p "$settings_dir"
+        cp "$settings_tpl" "$settings_file"
+        log_success "Created .claude/settings.local.json from template"
+    else
+        merge_settings_template "$settings_file" "$settings_tpl"
+    fi
+}
+
 # ─── Init from Domain ────────────────────────────────────────────────────────
 
 init_domain() {
@@ -582,23 +725,17 @@ init_domain() {
     if [[ -z "$domain_name_or_url" ]]; then
         log_info "Available domains:"
         echo
-        for domain_dir in "$DOMAINS_DIR"/*/; do
-            [[ ! -d "$domain_dir" ]] && continue
-            local name
-            name="$(basename "$domain_dir")"
-            local desc=""
-            if [[ -f "$domain_dir/domain.yaml" ]]; then
-                desc=$(grep '^description:' "$domain_dir/domain.yaml" | sed 's/^description: *"*//;s/"*$//')
-            fi
-            printf "  %-15s %s\n" "$name" "$desc"
-        done
+        list_available_domains
         echo
         log_info "Usage:"
-        log_info "  ./setup.sh init <domain-name>         Bundled domain"
-        log_info "  ./setup.sh init <url>                 External domain git URL"
-        log_info "  ./setup.sh init <url#subdir>          Domain pack with multiple domains"
+        log_info "  setup.sh --workspace <path> init <domain-name>   Bundled or workspace domain"
+        log_info "  setup.sh --workspace <path> init <url>           External domain git URL"
+        log_info "  setup.sh --workspace <path> init <url#subdir>    Domain pack with multiple domains"
         exit 0
     fi
+
+    # A fresh workspace may not exist yet — create it.
+    mkdir -p "$WORKSPACE_ROOT_RESOLVED"
 
     local domain_name
     local source_type="bundled"
@@ -614,13 +751,12 @@ init_domain() {
         domain_name="$domain_name_or_url"
     fi
 
-    local domain_dir="$DOMAINS_DIR/$domain_name"
-    if [[ ! -d "$domain_dir" ]]; then
-        log_error "Domain '$domain_name' not found in $DOMAINS_DIR/"
+    local domain_dir
+    domain_dir="$(find_domain_dir "$domain_name")"
+    if [[ -z "$domain_dir" ]]; then
+        log_error "Domain '$domain_name' not found."
         log_info "Available domains:"
-        for d in "$DOMAINS_DIR"/*/; do
-            [[ -d "$d" ]] && echo "  $(basename "$d")"
-        done
+        list_available_domains
         exit 1
     fi
 
@@ -640,36 +776,19 @@ init_domain() {
     # Record where this domain came from so refresh-domain can re-fetch it
     record_domain_source "$DEV_ENV_YAML" "$domain_name" "$source_type" "" "$source_subdir"
 
-    local settings_dir="$SCRIPT_DIR/.claude"
-    local settings_file="$settings_dir/settings.local.json"
-    local settings_tpl=""
-    if [[ -f "$domain_dir/settings.local.json.tpl" ]]; then
-        settings_tpl="$domain_dir/settings.local.json.tpl"
-    elif [[ -f "$SCRIPT_DIR/settings.local.json.tpl" ]]; then
-        settings_tpl="$SCRIPT_DIR/settings.local.json.tpl"
-    fi
-
-    if [[ -z "$settings_tpl" ]]; then
-        : # no template available
-    elif [[ ! -f "$settings_file" ]]; then
-        mkdir -p "$settings_dir"
-        cp "$settings_tpl" "$settings_file"
-        log_success "Created .claude/settings.local.json from template"
-    else
-        merge_settings_template "$settings_file" "$settings_tpl"
-    fi
+    apply_settings_template "$domain_dir"
 
     echo
     log_info "Next steps:"
-    log_info "  ./setup.sh clone    — Clone all repositories"
-    log_info "  ./setup.sh status   — Check repo status"
+    log_info "  setup.sh --workspace $WORKSPACE_ROOT_RESOLVED clone    — Clone all repositories"
+    log_info "  setup.sh --workspace $WORKSPACE_ROOT_RESOLVED status   — Check repo status"
 }
 
 # ─── Refresh Domain ──────────────────────────────────────────────────────────
 
 refresh_domain() {
     if [[ ! -f "$DEV_ENV_YAML" ]]; then
-        log_error "No dev-env.yaml found. Run './setup.sh init' first."
+        log_error "No dev-env.yaml found. Run 'init' first."
         exit 1
     fi
 
@@ -680,16 +799,17 @@ refresh_domain() {
 
     if [[ -z "$domain_name" ]]; then
         log_error "No domain recorded in dev-env.yaml."
-        log_info "Re-run './setup.sh init <domain>' to initialize with source tracking."
+        log_info "Re-run 'init <domain>' to initialize with source tracking."
         exit 1
     fi
 
     log_info "Refreshing domain '$domain_name' (source: $source)"
 
     if [[ "$source" == "bundled" ]]; then
-        local domain_dir="$DOMAINS_DIR/$domain_name"
-        if [[ ! -d "$domain_dir" ]]; then
-            log_error "Bundled domain '$domain_name' not found at domains/$domain_name/"
+        local domain_dir
+        domain_dir="$(find_domain_dir "$domain_name")"
+        if [[ -z "$domain_dir" ]]; then
+            log_error "Bundled domain '$domain_name' not found."
             exit 1
         fi
         if ! validate_domain "$domain_dir"; then
@@ -703,7 +823,8 @@ refresh_domain() {
         domain_name="$FETCHED_DOMAIN_NAME"
     fi
 
-    local domain_dir="$DOMAINS_DIR/$domain_name"
+    local domain_dir
+    domain_dir="$(find_domain_dir "$domain_name")"
 
     log_warn "This will overwrite dev-env.yaml with the refreshed domain."
     read -rp "Continue? [y/N] " answer
@@ -713,34 +834,39 @@ refresh_domain() {
     record_domain_source "$DEV_ENV_YAML" "$domain_name" "$source" "$ref" "$subdir"
 
     log_success "Domain '$domain_name' refreshed."
-    log_info "Run './setup.sh clone' to clone any newly added repositories."
+    log_info "Run 'clone' to clone any newly added repositories."
 }
 
 # ─── Usage ────────────────────────────────────────────────────────────────────
 
 usage() {
-    echo "Dev Environment Setup Script"
+    echo "Workspace Setup Script (workspace plugin)"
     echo
     echo "Usage:"
-    echo "  ./setup.sh              Clone all repos (first time setup)"
-    echo "  ./setup.sh clone        Clone all repos"
-    echo "  ./setup.sh update       Update all repos (git pull)"
-    echo "  ./setup.sh clone <dir>  Clone specific repo by directory name"
-    echo "  ./setup.sh update <dir> Update specific repo by directory name"
-    echo "  ./setup.sh status       Show status of all repos"
-    echo "  ./setup.sh list         List configured repos"
-    echo "  ./setup.sh init <name>  Initialize from a bundled domain"
-    echo "  ./setup.sh init <url>   Initialize from an external domain git URL"
-    echo "  ./setup.sh init <url#subdir>  External pack containing multiple domains"
-    echo "  ./setup.sh refresh-domain     Re-fetch domain from its recorded source"
-    echo "  ./setup.sh help         Show this help"
+    echo "  setup.sh [--workspace <path>] <command> [args]"
     echo
-    echo "Configuration:"
-    echo "  dev-env.yaml — repo manifest (gitignored, generated by 'init')"
+    echo "Commands:"
+    echo "  init <name>           Initialize from a bundled/workspace domain"
+    echo "  init <url>            Initialize from an external domain git URL"
+    echo "  init <url#subdir>     External pack containing multiple domains"
+    echo "  clone                 Clone all repos (first time setup)"
+    echo "  clone <dir>           Clone a specific repo by directory name"
+    echo "  update                Update all repos (git pull)"
+    echo "  update <dir>          Update a specific repo by directory name"
+    echo "  status                Show status of all repos"
+    echo "  list                  List configured repos"
+    echo "  refresh-domain        Re-fetch domain from its recorded source"
+    echo "  help                  Show this help"
+    echo
+    echo "Workspace root:"
+    echo "  --workspace <path> selects where dev-env.yaml, repos/, projects/,"
+    echo "  and workspace-local domains/ live. If omitted, WORKSPACE_ROOT or"
+    echo "  CLAUDE_PROJECT_DIR is used, else the nearest ancestor of \$PWD that"
+    echo "  contains dev-env.yaml."
     echo
     echo "Domains:"
-    echo "  Run './setup.sh init' (no args) to list available bundled domains."
-    echo "  External domains are fetched from git and installed into domains/<name>/."
+    echo "  Run 'init' (no args) to list bundled + workspace domains."
+    echo "  External domains are fetched from git into the workspace's domains/<name>/."
     echo
     echo "Notes:"
     echo "  All repos are cloned with --filter=blob:none (blobless)."
@@ -750,17 +876,34 @@ usage() {
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 main() {
+    # Parse --workspace anywhere on the command line, before the subcommand.
+    local positionals=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --workspace)
+                WS_FLAG="$2"; shift 2 ;;
+            --workspace=*)
+                WS_FLAG="${1#*=}"; shift ;;
+            *)
+                positionals+=("$1"); shift ;;
+        esac
+    done
+    set -- "${positionals[@]}"
+
     local action="${1:-clone}"
     local target="${2:-}"
 
     case "$action" in
         init)
+            resolve_workspace_root create
             init_domain "$target"
             ;;
         refresh-domain)
+            resolve_workspace_root require
             refresh_domain
             ;;
         clone)
+            resolve_workspace_root require
             detect_repo_source
             if [[ -n "$target" ]]; then
                 handle_specific_repo "clone" "$target"
@@ -769,6 +912,7 @@ main() {
             fi
             ;;
         update)
+            resolve_workspace_root require
             detect_repo_source
             if [[ -n "$target" ]]; then
                 handle_specific_repo "update" "$target"
@@ -777,10 +921,12 @@ main() {
             fi
             ;;
         status)
+            resolve_workspace_root require
             detect_repo_source
             show_status
             ;;
         list)
+            resolve_workspace_root require
             detect_repo_source
             list_repos
             ;;

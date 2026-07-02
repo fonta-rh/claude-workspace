@@ -1,5 +1,6 @@
 ---
-description: Close a project workspace and mark it as done
+name: close
+description: Close a project workspace, mark it done, and clean up its worktrees
 argument-hint: "[name-or-number] [closing notes]"
 ---
 
@@ -9,7 +10,7 @@ You are helping a developer close a project workspace by marking it as
 done. This updates the project's CLAUDE.md frontmatter and optionally
 records closing notes.
 
-Everything after "close" in `$ARGUMENTS` is parsed as follows:
+Everything after the skill name in `$ARGUMENTS` is parsed as follows:
 - The **first token** is an optional project name or numeric shorthand.
 - Everything after the first token is treated as **closing notes**.
 
@@ -18,21 +19,23 @@ Everything after "close" in `$ARGUMENTS` is parsed as follows:
 **1a. Resolve project name**
 
 Extract the first token from `$ARGUMENTS`. Run
-`scripts/resume-project.py <first-token>` via Bash (omit the token if
-none was provided). Parse the JSON and handle by `status`:
+`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/resume-project.py" <first-token>`
+via Bash (omit the token if none was provided). Parse the JSON and handle
+by `status`:
 
-- **`ok`** — use `project.name` as the target. Store the top-level
-  `root` field as the **workspace root** — all paths in `project` are
-  relative to it. **Always join `root` + relative path** for absolute
-  paths in Read/Bash. Proceed to 1b.
+- **`ok`** — use `project.name` as the target. All paths in `project` are
+  **absolute** — use them directly in Read/Bash (no joining). Proceed to 1b.
 - **`no_argument`** — check if a project was loaded earlier in this
-  conversation (e.g., via `/project:resume`). If so, use that project
+  conversation (e.g., via `/workspace:resume`). If so, use that project
   name as the default: re-run the script with that name and proceed.
   Otherwise, present the first 3 `alternatives` as AskUserQuestion
   options plus "See all projects". Re-run with the chosen name.
 - **`not_found`** / **`out_of_range`** — show `error_message`, present
   `alternatives` as a picker, re-run with chosen name.
 - **`no_projects`** — show `error_message` and stop.
+- **`error`** — if the message mentions **PyYAML**, relay the install
+  command (`pip3 install pyyaml`) rather than retrying. Otherwise show the
+  message and stop.
 
 **1b. Check current status**
 
@@ -95,28 +98,32 @@ Use AskUserQuestion with options:
 If "commit and push": help the user commit and push in each worktree.
 For `no_upstream` branches, push with `-u` to set the upstream:
 `git -C <worktree-path> push -u fork <branch>`
+(each worktree's `path` in `P.worktree_status` is absolute).
 
 **2.5c. Remove worktrees**
 
-Unless the user chose to keep worktrees, remove each existing worktree:
+Unless the user chose to keep worktrees, remove each existing worktree.
+The worktree `path` and the repo checkout are derivable from
+`P.worktree_status` (paths are absolute). For a repo at
+`<workspace>/repos/<repo>`:
 
 ```bash
 # If user chose "Discard changes" (worktree may be dirty):
-git -C repos/<repo> worktree remove --force .worktrees/<branch>
+git -C <workspace>/repos/<repo> worktree remove --force .worktrees/<branch>
 # If worktree is clean (user chose "Commit and push" or was already clean):
-git -C repos/<repo> worktree remove .worktrees/<branch>
+git -C <workspace>/repos/<repo> worktree remove .worktrees/<branch>
 ```
 
 For non-PR branches (those NOT starting with `pr/`), also offer to
 delete the local branch:
 ```bash
-git -C repos/<repo> branch -d <branch>
+git -C <workspace>/repos/<repo> branch -d <branch>
 ```
 
 For PR checkout branches (`pr/<number>`), just delete the local branch
 — these are local refs created from the remote PR, not remote branches:
 ```bash
-git -C repos/<repo> branch -D pr/<number>
+git -C <workspace>/repos/<repo> branch -D pr/<number>
 ```
 
 **2.5d. Update frontmatter**
@@ -131,7 +138,7 @@ closing summary: "Worktrees preserved — branches still active in repos."
 
 **3a. Read the current CLAUDE.md**
 
-Read the full `projects/<name>/CLAUDE.md` file.
+Read the full `project.context_file` (absolute path from Step 1).
 
 **3b. Update frontmatter fields**
 
@@ -174,7 +181,7 @@ Project `<name>` marked as done.
 
 If closing notes were added, include them in the confirmation.
 Remind the user that closed projects won't appear in the SessionStart
-summary, but can still be resumed with `/project:resume <name>`.
+summary, but can still be resumed with `/workspace:resume <name>`.
 
 ---
 
@@ -184,4 +191,4 @@ summary, but can still be resumed with `/project:resume <name>`.
 - Never delete the project directory — closing just updates metadata
 - Use today's date for the `closed` field
 - The project will be filtered from the SessionStart "Recent projects"
-  table but remains fully accessible via `/project:resume`
+  table but remains fully accessible via `/workspace:resume`

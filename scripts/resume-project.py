@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Resolve a project and return structured context for /project:resume and /project:close.
+"""Resolve a project and return structured context for /workspace:resume and /workspace:close.
 
 Usage: resume-project.py [project-name-or-number]
 Output: JSON to stdout (see resolve_project for schema).
 """
+
+from __future__ import annotations
 
 import datetime
 import glob
@@ -15,7 +17,20 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
+# Plugins cannot declare python dependencies. PyYAML is required to parse
+# project frontmatter — emit a self-describing JSON error (that the calling
+# skill can relay) instead of a raw ImportError traceback.
+try:
+    import yaml
+except ImportError:
+    print(json.dumps({
+        "status": "error",
+        "error": "PyYAML is required by resume-project.py (project frontmatter "
+                 "is YAML). Install with: pip3 install pyyaml",
+    }))
+    sys.exit(0)
+
+import workspace_lib
 
 SKILL_SUGGESTIONS: dict[str, list[str]] = {
     "bug": [
@@ -194,42 +209,63 @@ def extract_checklist(text: str) -> dict:
     }
 
 
-def resolve_domain_context(domain: str, root: Path) -> dict:
-    """Resolve the domain's context file and docs directory."""
+def domain_search_roots(root: Path) -> list[Path]:
+    """Directories that may hold domains: workspace domains/ first, then bundled."""
+    return [root / "domains", workspace_lib.PLUGIN_ROOT / "domains"]
+
+
+def find_domain_base(domain: str, root: Path) -> Path | None:
+    """Locate a domain directory by name: workspace first, then plugin-bundled."""
     if not domain:
+        return None
+    for base in domain_search_roots(root):
+        candidate = base / domain
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def resolve_domain_context(domain: str, root: Path) -> dict:
+    """Resolve the domain's context file and docs directory (absolute paths)."""
+    domain_dir = find_domain_base(domain, root)
+    if domain_dir is None:
         return {"context_file": None, "docs": []}
-    domain_dir = root / "domains" / domain
     ctx_file = domain_dir / "context.md"
-    context_file = str(ctx_file.relative_to(root)) if ctx_file.is_file() else None
+    context_file = str(ctx_file) if ctx_file.is_file() else None
     docs_dir = domain_dir / "docs"
     docs = []
     if docs_dir.is_dir():
         docs = [
-            {"name": p.stem, "path": str(p.relative_to(root))}
+            {"name": p.stem, "path": str(p)}
             for p in sorted(docs_dir.glob("*.md"))
         ]
     return {"context_file": context_file, "docs": docs}
 
 
 def resolve_repo_context(repos: list[str], root: Path) -> list[dict[str, str]]:
-    """For each repo, find context files (repo CLAUDE.md and/or domain context)."""
+    """For each repo, find context files (repo CLAUDE.md and/or domain context).
+
+    Paths are absolute — bundled-domain files live outside the workspace.
+    """
     results = []
     for repo in repos:
         repo_claude = root / "repos" / repo / "CLAUDE.md"
         if repo_claude.is_file():
             results.append({
                 "repo": repo,
-                "path": str(repo_claude.relative_to(root)),
+                "path": str(repo_claude),
                 "source": "repo",
             })
 
-        matches = glob.glob(str(root / "domains" / "*" / "context" / f"{repo}.md"))
-        if matches:
-            results.append({
-                "repo": repo,
-                "path": str(Path(matches[0]).relative_to(root)),
-                "source": "domain",
-            })
+        for base in domain_search_roots(root):
+            matches = glob.glob(str(base / "*" / "context" / f"{repo}.md"))
+            if matches:
+                results.append({
+                    "repo": repo,
+                    "path": str(Path(matches[0])),
+                    "source": "domain",
+                })
+                break
 
     return results
 
@@ -247,7 +283,7 @@ def resolve_worktree_status(
         entry: dict = {
             "repo": wt["repo"],
             "branch": wt["branch"],
-            "path": wt["path"],
+            "path": str(wt_path),
             "exists": False,
             "dirty": False,
             "dirty_count": 0,
@@ -295,14 +331,14 @@ def resolve_worktree_status(
 
 def get_recent_names(root: Path) -> list[str]:
     """Get recent non-done project names via recent-projects.py --names."""
-    script = root / "scripts" / "recent-projects.py"
+    script = Path(__file__).resolve().parent / "recent-projects.py"
     if not script.is_file():
         return _fallback_project_names(root)
     try:
         result = subprocess.run(
             [sys.executable, str(script), "--names"],
             capture_output=True, text=True,
-            env={**os.environ, "CLAUDE_PROJECT_DIR": str(root)},
+            env={**os.environ, "WORKSPACE_ROOT": str(root)},
         )
         if result.returncode != 0:
             return _fallback_project_names(root)
@@ -367,14 +403,14 @@ def resolve_project(arg: str | None, root: Path) -> dict:
     readme = project_dir / "README.md"
 
     if claude_md.is_file():
-        context_file = str(claude_md.relative_to(root))
+        context_file = str(claude_md)
         context_type = "claude_md"
         try:
             text = claude_md.read_text()
         except OSError:
             text = ""
     elif readme.is_file():
-        context_file = str(readme.relative_to(root))
+        context_file = str(readme)
         context_type = "readme"
         try:
             text = readme.read_text()
@@ -428,7 +464,7 @@ def resolve_project(arg: str | None, root: Path) -> dict:
         "root": str(root),
         "project": {
             "name": project_name,
-            "dir": str(project_dir.relative_to(root)),
+            "dir": str(project_dir),
             "context_file": context_file,
             "context_type": context_type,
             "has_frontmatter": has_frontmatter,
@@ -450,7 +486,14 @@ def resolve_project(arg: str | None, root: Path) -> dict:
 
 
 def main():
-    root = Path(os.environ.get("CLAUDE_PROJECT_DIR", Path(__file__).resolve().parent.parent))
+    root = workspace_lib.resolve_workspace_root()
+    if root is None:
+        print(json.dumps({
+            "status": "error",
+            "error": "Could not determine the workspace root. Set WORKSPACE_ROOT "
+                     "or run inside a workspace (a directory containing dev-env.yaml).",
+        }))
+        sys.exit(0)
     arg = sys.argv[1] if len(sys.argv) > 1 else None
     result = resolve_project(arg, root)
     print(json.dumps(result, indent=2, default=str))

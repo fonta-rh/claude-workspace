@@ -1,16 +1,18 @@
 ---
-description: Resume an existing project workspace
+name: resume
+description: Resume an existing project workspace — reload its context and continue work
 argument-hint: [name-or-number]
 ---
 
 # Resume Project Workspace
 
-Resume work on an existing project. Projects live under `projects/`.
+Resume work on an existing project. Projects live under `projects/` in the
+workspace.
 
 ## Step 1: Resolve Project
 
-Run `scripts/resume-project.py $ARGUMENTS` via Bash. Parse the JSON output
-and handle by `status`:
+Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/resume-project.py" $ARGUMENTS`
+via Bash. Parse the JSON output and handle by `status`:
 
 - **`ok`** — proceed to Step 2.
 - **`no_argument`** — present the first 3 `alternatives` as AskUserQuestion
@@ -19,12 +21,14 @@ and handle by `status`:
 - **`not_found`** or **`out_of_range`** — show `error_message`, present
   `alternatives` as a picker, re-run with the chosen name.
 - **`no_projects`** — show `error_message` and stop.
+- **`error`** — if the message mentions **PyYAML**, the dependency is missing
+  on the user's machine; relay the install command (`pip3 install pyyaml`)
+  rather than retrying. For any other error, show the message and stop.
 
 Store the `project` object from the JSON as `P` for the remaining steps.
-Store the top-level `root` field as the **workspace root**. All paths in
-`P` (context_file, repo_context_files, worktree paths, domain docs, etc.)
-are relative to this root. **Always join `root` + relative path** to form
-absolute paths when using the Read tool or Bash commands.
+**All paths in `P` (context_file, repo_context_files, worktree paths, domain
+docs, etc.) are absolute** — use them directly with the Read tool or Bash;
+no path joining is needed.
 
 ## Step 2: Load Project Index
 
@@ -69,14 +73,15 @@ Where `<status>` is derived from each entry in `P.worktree_status`:
 - `ahead > 0` → `ahead by N`
 - otherwise → `clean`
 
-If any worktree is MISSING, suggest how to recreate it:
+If any worktree is MISSING, suggest how to recreate it (paths in
+`P.worktree_status` are absolute):
 - For PR branches (starting with `pr/`):
   > "Worktree for `<repo>` is missing. Recreate with:
-  > `git -C repos/<repo> fetch origin pull/<N>/head:pr/<N> &&
-  >  git -C repos/<repo> worktree add .worktrees/pr/<N> pr/<N>`"
+  > `git -C <workspace>/repos/<repo> fetch origin pull/<N>/head:pr/<N> &&
+  >  git -C <workspace>/repos/<repo> worktree add .worktrees/pr/<N> pr/<N>`"
 - For dev branches:
   > "Worktree for `<repo>` is missing. Recreate with:
-  > `git -C repos/<repo> worktree add .worktrees/<branch> -b <branch>
+  > `git -C <workspace>/repos/<repo> worktree add .worktrees/<branch> -b <branch>
   >  origin/<default-branch>`"
 
 Add: "When working on code changes, use the worktree paths above
@@ -117,7 +122,8 @@ Add: "Domain docs available for deeper reference (architecture, debugging)."
 
 **4a.** Build a task menu from `P.checklist.unchecked_items`. For each
 item, match its text and `section` against `P.reference_files` descriptions
-to determine which detail files are relevant.
+to determine which detail files are relevant. Reference-file paths are
+relative to the project directory (`P.dir`, absolute) — join them to read.
 
 **4b.** Present via AskUserQuestion with options like:
 - "Next: <task text> (loads: file1.md, file2.md)"
@@ -131,8 +137,8 @@ project — all content is already in context from Step 2).
 Confirm what was loaded.
 
 **4d.** If `P.worktree_status` is non-empty and the selected task
-involves a repo with a worktree, remind which path to use:
-> "Working directory for `<repo>`: `repos/<repo>/.worktrees/<branch>/`"
+involves a repo with a worktree, remind which path to use (from the
+worktree's absolute `path`).
 
 **4e.** Suggest relevant skills from `P.skill_suggestions`.
 

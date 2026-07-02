@@ -1,5 +1,6 @@
 ---
-description: Consolidate bloated project CLAUDE.md by archiving completed checklist items
+name: consolidate
+description: Consolidate a bloated project CLAUDE.md by archiving completed checklist items
 argument-hint: [name-or-number]
 ---
 
@@ -12,18 +13,16 @@ and a pointer line in each section for recent context.
 Sections with 10+ completed `- [x]` items qualify. Unchecked items,
 strikethroughs, and non-checklist content are never touched.
 
-## Step 0: Locate Workspace Root
-
-The workspace root is the directory containing this `.claude/` folder.
-Determine it from the path of this command file and store it as `ROOT`.
-All script calls below MUST use `$ROOT/scripts/...` — never relative
-paths, since the working directory may be inside a worktree.
+The scripts resolve the workspace root themselves (from `WORKSPACE_ROOT` /
+`CLAUDE_PROJECT_DIR` / the nearest ancestor of the cwd containing
+`dev-env.yaml`), so no workspace path needs to be computed here.
 
 ## Step 1: Resolve Project
 
 Extract the first token from `$ARGUMENTS`. Run
-`python3 $ROOT/scripts/resume-project.py <first-token>` via Bash (omit
-the token if none was provided). Parse the JSON and handle by `status`:
+`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/resume-project.py" <first-token>`
+via Bash (omit the token if none was provided). Parse the JSON and handle
+by `status`:
 
 - **`ok`** — use `project.name` as the target. Proceed to Step 2.
 - **`no_argument`** — check if a project was loaded earlier in this
@@ -33,12 +32,15 @@ the token if none was provided). Parse the JSON and handle by `status`:
 - **`not_found`** / **`out_of_range`** — show `error_message`, present
   `alternatives` as a picker, re-run with chosen name.
 - **`no_projects`** — show `error_message` and stop.
+- **`error`** — if the message mentions **PyYAML**, relay the install
+  command (`pip3 install pyyaml`) rather than retrying. Otherwise show the
+  message and stop.
 
 ## Step 2: Dry Run
 
 Run via Bash:
 ```
-python3 $ROOT/scripts/consolidate-project.py --dry-run <project-name>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/consolidate-project.py" --dry-run <project-name>
 ```
 
 Parse the JSON output:
@@ -65,7 +67,7 @@ Ask: "Proceed with consolidation?"
 
 Run via Bash:
 ```
-python3 $ROOT/scripts/consolidate-project.py <project-name>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/consolidate-project.py" <project-name>
 ```
 
 Parse the JSON output.
