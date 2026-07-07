@@ -345,5 +345,61 @@ class TestVerify(SkillsFixture):
         self.assertEqual(out["status"], "error")
 
 
+class TestUnlinkCheck(SkillsFixture):
+
+    def check_one(self, project: str) -> dict:
+        out = run_skills(self.ws, "unlink-check", project)
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(len(out["skills"]), 1)
+        return out["skills"][0]
+
+    def _linked_project(self, project: str = "closing") -> None:
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        self.link("vet-review", "repo-a")
+        self.make_project(project, skills=[
+            {"name": "vet-review", "source": "repo-a"}])
+
+    def test_exclusive_skill_is_removable(self):
+        self._linked_project()
+        entry = self.check_one("closing")
+        self.assertTrue(entry["removable"])
+        self.assertTrue(entry["is_symlink"])
+        self.assertFalse(entry["missing"])
+        self.assertEqual(entry["used_by"], [])
+
+    def test_shared_with_active_project_is_kept(self):
+        self._linked_project()
+        self.make_project("other", status="active", skills=[
+            {"name": "vet-review", "source": "repo-a"}])
+        entry = self.check_one("closing")
+        self.assertFalse(entry["removable"])
+        self.assertEqual(entry["used_by"], ["other"])
+
+    def test_shared_only_with_done_project_is_removable(self):
+        self._linked_project()
+        self.make_project("finished", status="done", skills=[
+            {"name": "vet-review", "source": "repo-a"}])
+        entry = self.check_one("closing")
+        self.assertTrue(entry["removable"])
+        self.assertEqual(entry["used_by"], [])
+
+    def test_real_dir_is_not_removable(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        self.ws_entry("vet-review").parent.mkdir(parents=True, exist_ok=True)
+        self.ws_entry("vet-review").mkdir()
+        self.make_project("closing", skills=[
+            {"name": "vet-review", "source": "repo-a"}])
+        entry = self.check_one("closing")
+        self.assertFalse(entry["removable"])
+        self.assertFalse(entry["is_symlink"])
+
+    def test_absent_entry_is_missing_not_removable(self):
+        self.make_project("closing", skills=[
+            {"name": "vet-review", "source": "repo-a"}])
+        entry = self.check_one("closing")
+        self.assertTrue(entry["missing"])
+        self.assertFalse(entry["removable"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

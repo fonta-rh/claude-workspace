@@ -234,6 +234,49 @@ def cmd_verify(root: Path, project: str) -> dict:
     return {"status": "ok", "skills": results}
 
 
+def cmd_unlink_check(root: Path, project: str) -> dict:
+    own_skills = read_project_skills(root, project)
+
+    # Skill name -> other active (status != done) projects referencing it.
+    used_by: dict[str, list[str]] = {}
+    projects_dir = root / "projects"
+    if projects_dir.is_dir():
+        for other_dir in sorted(projects_dir.iterdir()):
+            if not other_dir.is_dir() or other_dir.name == project:
+                continue
+            claude_md = other_dir / "CLAUDE.md"
+            if not claude_md.is_file():
+                continue
+            fm = parse_frontmatter(claude_md)
+            if fm.get("status") == "done":
+                continue
+            raw = fm.get("skills") or []
+            if not isinstance(raw, list):
+                continue
+            for item in raw:
+                if isinstance(item, dict) and item.get("name"):
+                    used_by.setdefault(str(item["name"]), []).append(
+                        other_dir.name)
+
+    results = []
+    for skill in own_skills:
+        name = skill["name"]
+        entry = ws_skills_dir(root) / name
+        missing = not os.path.lexists(entry)
+        is_symlink = entry.is_symlink()
+        users = used_by.get(name, [])
+        results.append({
+            "name": name,
+            "source": skill["source"],
+            "missing": missing,
+            "is_symlink": is_symlink,
+            "removable": not missing and is_symlink and not users,
+            "used_by": users,
+        })
+
+    return {"status": "ok", "skills": results}
+
+
 def main():
     root = workspace_lib.resolve_workspace_root()
     if root is None:
@@ -257,6 +300,10 @@ def main():
         if len(rest) != 1:
             fail("Usage: skills.py verify <project>")
         result = cmd_verify(root, rest[0])
+    elif command == "unlink-check":
+        if len(rest) != 1:
+            fail("Usage: skills.py unlink-check <project>")
+        result = cmd_unlink_check(root, rest[0])
     else:
         fail(f"Unknown subcommand: {command}")
         return  # unreachable; keeps type-checkers happy
