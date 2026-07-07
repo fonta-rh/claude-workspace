@@ -175,7 +175,7 @@ them in workspace autocomplete by symlinking. Skip this step entirely
 2. Partition the scanned skills:
    - `already_present.status == "same_source"` → already linked (by
      another project). Do NOT ask about these; record them in the
-     `skills:` frontmatter (step 5 below) and mention the reuse in the
+     `skills:` frontmatter (step 6 below) and mention the reuse in the
      Step 4 summary.
    - `already_present.status == "collision"` → not linkable (the name is
      taken by something else at the workspace root). Exclude, and note
@@ -357,14 +357,14 @@ worktrees:
 # worktrees: subset of repos that have active worktrees (from Step 1e)
 # branch: the branch name used for all worktrees
 # Omit both if no worktrees were created (ci-testing, analysis non-PR)
-related_links:
-  - <any URLs provided>
-# If user provided no URLs, use: related_links: []
 skills:
   - name: <skill-name>
     source: <repo that provides it>
 # skills: repo skills linked into $WS/.claude/skills/ (from Step 1g)
 # Omit if no skills were linked
+related_links:
+  - <any URLs provided>
+# If user provided no URLs, use: related_links: []
 ---
 ```
 
