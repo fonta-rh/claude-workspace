@@ -174,6 +174,16 @@ class TestScan(SkillsFixture):
         self.assertEqual(len(out["errors"]), 1)
         self.assertIn("anon", out["errors"][0])
 
+    def test_scan_skill_with_invalid_utf8_reports_error(self):
+        skill_dir = self.ws / "repos" / "repo-a" / ".claude" / "skills" / "binary"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_bytes(b"\xff\xfe---\nname: x\n---\n")
+        out = run_skills(self.ws, "scan", "repo-a")
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(out["skills"], [])
+        self.assertEqual(len(out["errors"]), 1)
+        self.assertIn("binary", out["errors"][0])
+
     def test_scan_no_args_is_error(self):
         out = run_skills(self.ws, "scan")
         self.assertEqual(out["status"], "error")

@@ -51,7 +51,7 @@ def parse_frontmatter(path: Path) -> dict[str, Any]:
     """Extract YAML frontmatter between --- delimiters."""
     try:
         lines = path.read_text().splitlines()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return {}
 
     if not lines or lines[0].strip() != "---":
@@ -163,22 +163,33 @@ def cmd_scan(root: Path, repos: list[str]) -> dict:
 def cmd_link(root: Path, name: str, repo: str) -> dict:
     skill_dir = find_skill_dir(root, repo, name)
     if skill_dir is None:
-        return {"status": "error", "error": f"Skill '{name}' not found in repo '{repo}'"}
+        fail(f"No skill with frontmatter name '{name}' found in "
+             f"repos/{repo}/.claude/skills/")
 
-    entry = ws_skills_dir(root) / name
-    entry.parent.mkdir(parents=True, exist_ok=True)
+    skills_dir = ws_skills_dir(root)
+    created_dir = not skills_dir.is_dir()
+    skills_dir.mkdir(parents=True, exist_ok=True)
 
-    # Remove existing entry if it's a symlink
-    if os.path.lexists(entry):
-        if entry.is_symlink():
-            entry.unlink()
-        else:
-            return {"status": "error", "error": f"Cannot overwrite non-symlink at {entry}"}
+    entry = skills_dir / name
+    state = classify_existing(entry, skill_dir)
+    if state == "collision":
+        fail(f"{entry} already exists and is not a symlink to this skill "
+             f"— refusing to touch it")
+    existed = state == "same_source"
+    if state == "dangling":
+        entry.unlink()
 
-    # Create symlink
-    entry.symlink_to(skill_dir)
+    target = os.path.relpath(skill_dir, skills_dir)
+    if not existed:
+        os.symlink(target, entry)
 
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "linked": {"name": name, "repo": repo,
+                   "path": str(entry), "target": os.readlink(entry)},
+        "existed": existed,
+        "created_dir": created_dir,
+    }
 
 
 def main():
@@ -197,10 +208,9 @@ def main():
             fail("scan requires at least one repo name")
         result = cmd_scan(root, rest)
     elif command == "link":
-        if len(rest) < 2:
-            fail("link requires name and repo")
-        name, repo = rest[0], rest[1]
-        result = cmd_link(root, name, repo)
+        if len(rest) != 2:
+            fail("Usage: skills.py link <name> <repo>")
+        result = cmd_link(root, rest[0], rest[1])
     else:
         fail(f"Unknown subcommand: {command}")
         return  # unreachable; keeps type-checkers happy
