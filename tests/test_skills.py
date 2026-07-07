@@ -269,5 +269,81 @@ class TestWorkspaceResolution(unittest.TestCase):
         self.assertIn("workspace", out["error"].lower())
 
 
+class TestVerify(SkillsFixture):
+
+    def verify_one(self, project: str) -> dict:
+        out = run_skills(self.ws, "verify", project)
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(len(out["skills"]), 1)
+        return out["skills"][0]
+
+    def test_verify_ok(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        self.link("vet-review", "repo-a")
+        self.make_project("proj", skills=[
+            {"name": "vet-review", "source": "repo-a"}])
+        entry = self.verify_one("proj")
+        self.assertEqual(entry["state"], "ok")
+        self.assertEqual(entry["source"], "repo-a")
+
+    def test_verify_missing(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        self.make_project("proj", skills=[
+            {"name": "vet-review", "source": "repo-a"}])
+        self.assertEqual(self.verify_one("proj")["state"], "missing")
+
+    def test_verify_broken_dangling(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        self.link("vet-review", "repo-a")
+        shutil.rmtree(self.ws / "repos" / "repo-a" / ".claude" / "skills"
+                      / "vet-review")
+        self.make_repo_skill("repo-a", "vet-review-2", "vet-review")
+        self.make_project("proj", skills=[
+            {"name": "vet-review", "source": "repo-a"}])
+        entry = self.verify_one("proj")
+        self.assertEqual(entry["state"], "broken")
+        self.assertNotIn("detail", entry)
+
+    def test_verify_broken_points_elsewhere(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        other = self.make_repo_skill("repo-b", "other-skill", "other-skill")
+        entry_path = self.ws_entry("vet-review")
+        entry_path.parent.mkdir(parents=True)
+        entry_path.symlink_to(other)
+        self.make_project("proj", skills=[
+            {"name": "vet-review", "source": "repo-a"}])
+        entry = self.verify_one("proj")
+        self.assertEqual(entry["state"], "broken")
+        self.assertEqual(entry["detail"], "points_elsewhere")
+
+    def test_verify_real_dir_is_points_elsewhere(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        self.ws_entry("vet-review").mkdir(parents=True)
+        self.make_project("proj", skills=[
+            {"name": "vet-review", "source": "repo-a"}])
+        entry = self.verify_one("proj")
+        self.assertEqual(entry["state"], "broken")
+        self.assertEqual(entry["detail"], "points_elsewhere")
+
+    def test_verify_source_gone(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        self.link("vet-review", "repo-a")
+        shutil.rmtree(self.ws / "repos" / "repo-a" / ".claude" / "skills"
+                      / "vet-review")
+        self.make_project("proj", skills=[
+            {"name": "vet-review", "source": "repo-a"}])
+        self.assertEqual(self.verify_one("proj")["state"], "source_gone")
+
+    def test_verify_project_without_skills(self):
+        self.make_project("proj")
+        out = run_skills(self.ws, "verify", "proj")
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(out["skills"], [])
+
+    def test_verify_unknown_project_is_error(self):
+        out = run_skills(self.ws, "verify", "nope")
+        self.assertEqual(out["status"], "error")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

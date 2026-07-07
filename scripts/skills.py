@@ -192,6 +192,48 @@ def cmd_link(root: Path, name: str, repo: str) -> dict:
     }
 
 
+def read_project_skills(root: Path, project: str) -> list[dict]:
+    """Normalized [{name, source}] from a project's frontmatter skills: list."""
+    claude_md = root / "projects" / project / "CLAUDE.md"
+    if not claude_md.is_file():
+        fail(f"Project '{project}' not found (no {claude_md})")
+    raw = parse_frontmatter(claude_md).get("skills") or []
+    if not isinstance(raw, list):
+        return []
+    result = []
+    for item in raw:
+        if isinstance(item, dict) and item.get("name"):
+            result.append({"name": str(item["name"]),
+                           "source": str(item.get("source", ""))})
+    return result
+
+
+def cmd_verify(root: Path, project: str) -> dict:
+    results = []
+    for skill in read_project_skills(root, project):
+        name, source = skill["name"], skill["source"]
+        source_dir = find_skill_dir(root, source, name)
+        entry = ws_skills_dir(root) / name
+
+        record = {"name": name, "source": source}
+        if source_dir is None:
+            record["state"] = "source_gone"
+        else:
+            state = classify_existing(entry, source_dir)
+            if state == "absent":
+                record["state"] = "missing"
+            elif state == "same_source":
+                record["state"] = "ok"
+            elif state == "dangling":
+                record["state"] = "broken"
+            else:  # collision: real dir or symlink to a different skill
+                record["state"] = "broken"
+                record["detail"] = "points_elsewhere"
+        results.append(record)
+
+    return {"status": "ok", "skills": results}
+
+
 def main():
     root = workspace_lib.resolve_workspace_root()
     if root is None:
@@ -211,6 +253,10 @@ def main():
         if len(rest) != 2:
             fail("Usage: skills.py link <name> <repo>")
         result = cmd_link(root, rest[0], rest[1])
+    elif command == "verify":
+        if len(rest) != 1:
+            fail("Usage: skills.py verify <project>")
+        result = cmd_verify(root, rest[0])
     else:
         fail(f"Unknown subcommand: {command}")
         return  # unreachable; keeps type-checkers happy
