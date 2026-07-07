@@ -57,10 +57,11 @@ If no notes were provided in the arguments, ask the user:
 > "Any closing notes for this project? (outcome, resolution, links to
 > PRs, etc.) Say 'no' to skip."
 
-## Step 2.5: Worktree Cleanup
+## Step 2.5: Worktree & Skill Cleanup
 
-If `P.worktree_status` (from Step 1's resume-project.py output) is
-non-empty:
+Substeps 2.5a-2.5d apply if `P.worktree_status` (from Step 1's
+resume-project.py output) is non-empty; substep 2.5e applies if
+`P.frontmatter.skills` is non-empty. If neither, skip to Step 3.
 
 **2.5a. Display worktree status**
 
@@ -134,6 +135,36 @@ in Step 3b (set to `worktrees: []`).
 If worktrees were kept, leave the field as-is and add a note to the
 closing summary: "Worktrees preserved — branches still active in repos."
 
+**2.5e. Remove skill symlinks**
+
+If `P.frontmatter.skills` is non-empty, check which linked skills are
+still needed by other active projects:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/skills.py" unlink-check <P.name>
+```
+
+If the output has `status: "error"`, mention it and continue to Step 3.
+Otherwise, for each entry in `skills`:
+
+- `removable: true` → remove the symlink (plain `rm` — the target is a
+  symlink, never use `rm -r`):
+
+  ```bash
+  rm "<workspace>/.claude/skills/<name>"
+  ```
+
+- `removable: false` with non-empty `used_by` → keep it; report:
+  "Skill `<name>` kept — still used by `<used_by>`."
+- `missing: true` → nothing to remove; skip silently.
+- `removable: false` with `is_symlink: false` → not ours to delete;
+  report: "`.claude/skills/<name>` is not a symlink — left in place."
+
+Skills are unlinked even when the user chose to keep worktrees in 2.5b —
+symlinks surface autocomplete entries and have nothing to do with
+branches. The `skills:` frontmatter is cleared in Step 3b regardless of
+what was removable.
+
 ## Step 3: Update Project CLAUDE.md
 
 **3a. Read the current CLAUDE.md**
@@ -151,6 +182,9 @@ Using the Edit tool, update the YAML frontmatter:
 3. If worktrees were removed in Step 2.5, change the `worktrees:`
    list to `worktrees: []`. Leave `branch:` as-is for historical
    reference.
+4. If the project had a `skills:` list, change it to `skills: []`
+   (the symlinks were handled in Step 2.5e; the cleared list records
+   that this project no longer holds any skill references).
 
 **3c. Add closing notes section**
 
