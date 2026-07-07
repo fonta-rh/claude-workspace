@@ -87,6 +87,29 @@ If any worktree is MISSING, suggest how to recreate it (paths in
 Add: "When working on code changes, use the worktree paths above
 instead of the main checkout."
 
+**If `P.frontmatter.skills` is non-empty:**
+Verify the project's linked skills:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/skills.py" verify <P.name>
+```
+
+If the output has `status: "error"`, mention it briefly and move on.
+Otherwise act per skill `state`:
+
+- `ok` → nothing; say nothing when all skills are `ok`.
+- `missing` or `broken` WITHOUT `detail` → repair automatically:
+  `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/skills.py" link <name> <source>`
+  then report: "Relinked skill `<name>` (from `<source>`)."
+- `broken` with `detail: "points_elsewhere"` → do NOT touch the entry
+  (another project or the user owns that name now). Warn: "Skill
+  `<name>` no longer points at `<source>` — leaving it alone."
+- `source_gone` → the skill no longer exists in the source repo. Warn,
+  and ask (AskUserQuestion) whether to remove the entry from this
+  project's `skills:` frontmatter (Edit tool) or keep it for reference.
+
+Repairs never block the resume flow — report and continue.
+
 **If `P.has_reference_files`:**
 Show the reference files table from `P.reference_files`. If
 `P.unregistered_files` is non-empty, note them. Show checklist progress
