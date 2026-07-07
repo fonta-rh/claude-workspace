@@ -189,6 +189,69 @@ class TestScan(SkillsFixture):
         self.assertEqual(out["status"], "error")
 
 
+class TestLink(SkillsFixture):
+
+    def test_link_creates_relative_symlink_named_after_frontmatter(self):
+        skill = self.make_repo_skill("repo-a", "some-dir", "real-name")
+        out = self.link("real-name", "repo-a")
+        self.assertEqual(out["status"], "ok")
+        self.assertFalse(out["existed"])
+        entry = self.ws_entry("real-name")
+        self.assertTrue(entry.is_symlink())
+        self.assertFalse(os.readlink(entry).startswith("/"))
+        self.assertEqual(entry.resolve(), skill.resolve())
+        self.assertEqual(out["linked"]["path"], str(entry))
+        self.assertEqual(out["linked"]["target"], os.readlink(entry))
+
+    def test_link_is_idempotent(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        self.link("vet-review", "repo-a")
+        out = self.link("vet-review", "repo-a")
+        self.assertEqual(out["status"], "ok")
+        self.assertTrue(out["existed"])
+
+    def test_link_reports_created_dir(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        self.assertFalse((self.ws / ".claude" / "skills").exists())
+        first = self.link("vet-review", "repo-a")
+        self.assertTrue(first["created_dir"])
+        self.make_repo_skill("repo-a", "critique", "critique")
+        second = self.link("critique", "repo-a")
+        self.assertFalse(second["created_dir"])
+
+    def test_link_refuses_real_directory(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        self.ws_entry("vet-review").mkdir(parents=True)
+        out = self.link("vet-review", "repo-a")
+        self.assertEqual(out["status"], "error")
+        self.assertTrue(self.ws_entry("vet-review").is_dir())
+
+    def test_link_refuses_foreign_symlink(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        other = self.make_repo_skill("repo-b", "other-skill", "other-skill")
+        entry = self.ws_entry("vet-review")
+        entry.parent.mkdir(parents=True)
+        entry.symlink_to(other)
+        out = self.link("vet-review", "repo-a")
+        self.assertEqual(out["status"], "error")
+        self.assertEqual(entry.resolve(), other.resolve())
+
+    def test_link_replaces_dangling_symlink(self):
+        skill = self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        entry = self.ws_entry("vet-review")
+        entry.parent.mkdir(parents=True)
+        entry.symlink_to(self.tmp / "gone")
+        out = self.link("vet-review", "repo-a")
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(entry.resolve(), skill.resolve())
+
+    def test_link_unknown_skill_name_is_error(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        out = self.link("nope", "repo-a")
+        self.assertEqual(out["status"], "error")
+        self.assertIn("nope", out["error"])
+
+
 class TestWorkspaceResolution(unittest.TestCase):
 
     def test_unresolvable_workspace_is_json_error(self):
