@@ -157,6 +157,7 @@ assert_not_contains "no stray scalar domain: line"          "$ws/dev-env.yaml" "
 assert_file      "settings.local.json created from template" "$ws/.claude/settings.local.json"
 assert_contains  "settings has workspace skill allow"       "$ws/.claude/settings.local.json" "workspace:\*"
 assert_not_contains "settings template has no hooks block"   "$ws/.claude/settings.local.json" "SessionStart"
+assert_dir       ".claude/skills dir created by init"        "$ws/.claude/skills"
 
 # Re-init with tnf to verify scalar 'domain: tnf' is replaced by the mapping
 run_setup_yn "$PLUGIN" "$ws" "y" init tnf >/dev/null 2>&1
@@ -338,6 +339,7 @@ assert_file     "sharedrepo cloned"                       "$ws/repos/sharedrepo/
 assert_file     "DOMAIN-CONTEXT.md distributed"           "$ws/repos/sharedrepo/DOMAIN-CONTEXT.md"
 assert_contains "context is from ALPHA (active domain)"   "$ws/repos/sharedrepo/DOMAIN-CONTEXT.md" "ALPHA"
 assert_not_contains "context is NOT from BETA"            "$ws/repos/sharedrepo/DOMAIN-CONTEXT.md" "BETA"
+assert_dir       ".claude/skills dir created by clone"       "$ws/.claude/skills"
 
 cleanup "$ws" "$shared_src"
 

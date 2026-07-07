@@ -717,6 +717,17 @@ apply_settings_template() {
     fi
 }
 
+# Pre-create the workspace's .claude/skills/ so Claude Code's filesystem
+# watcher (which only monitors directories that exist at session start)
+# picks up skill symlinks live. Used by /workspace:new skill linking.
+ensure_skills_dir() {
+    local skills_dir="$WORKSPACE_ROOT_RESOLVED/.claude/skills"
+    if [[ ! -d "$skills_dir" ]]; then
+        mkdir -p "$skills_dir"
+        log_success "Created .claude/skills/ (skill symlink dir)"
+    fi
+}
+
 # ─── Init from Domain ────────────────────────────────────────────────────────
 
 init_domain() {
@@ -897,6 +908,7 @@ main() {
         init)
             resolve_workspace_root create
             init_domain "$target"
+            ensure_skills_dir
             ;;
         refresh-domain)
             resolve_workspace_root require
@@ -904,6 +916,7 @@ main() {
             ;;
         clone)
             resolve_workspace_root require
+            ensure_skills_dir
             detect_repo_source
             if [[ -n "$target" ]]; then
                 handle_specific_repo "clone" "$target"
