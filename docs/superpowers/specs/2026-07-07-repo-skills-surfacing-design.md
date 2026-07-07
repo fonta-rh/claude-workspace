@@ -68,8 +68,10 @@ Conventions (identical to `resume-project.py`):
 - PyYAML for frontmatter, with the same self-describing JSON error when
   the module is missing.
 - `from __future__ import annotations`; python3.9+ compatible.
-- JSON to stdout; absolute paths in output; exit 1 + `{"error": ...}` on
-  fatal problems.
+- JSON to stdout; absolute paths in output. Every output carries a
+  top-level `"status": "ok" | "error"`; fatal problems print
+  `{"status": "error", "error": "..."}` and exit 0 — same as
+  `resume-project.py`, so calling skills always get parseable JSON.
 
 ### `scan <repo> [<repo>...]`
 
@@ -101,7 +103,10 @@ named repo.
 - `already_present` is `null`, or `{"status": "same_source"}` when
   `$WS/.claude/skills/<name>` is a symlink already resolving to this
   skill's `path`, or `{"status": "collision", "target": "<abs>"}` when the
-  entry is a real directory or a symlink resolving elsewhere.
+  entry is a real directory or a symlink resolving elsewhere, or
+  `{"status": "dangling"}` when it is a symlink whose target no longer
+  exists. Dangling entries are treated as absent by `/workspace:new`
+  (offering the skill is fine — `link` replaces dangling symlinks).
 - Per-repo problems (missing skills dir, unparseable frontmatter, skill
   missing `name:`) are collected in `errors` without failing the scan.
   A missing `.claude/skills/` dir in a repo is normal and reported as
@@ -112,12 +117,13 @@ named repo.
 Creates `$WS/.claude/skills/<name>` as a **relative** symlink
 (`../../repos/<repo>/.claude/skills/<dir>`), so the workspace survives
 being moved. `<dir>` is found by scanning the repo's skill dirs for the
-one whose frontmatter `name:` equals `<name>` (exit 1 + JSON error if
+one whose frontmatter `name:` equals `<name>` (JSON `status: error` if
 none matches).
 
-- Idempotent: if the entry already resolves to the same target, exits 0
-  with `{"linked": ..., "existed": true}`.
-- Refuses (exit 1, JSON error) to touch a real directory or a symlink
+- Idempotent: if the entry already resolves to the same target, reports
+  `{"linked": ..., "existed": true}`.
+- Replaces a dangling symlink at the target name (harmless leftover).
+- Refuses (JSON `status: error`) to touch a real directory or a symlink
   resolving elsewhere.
 - Creates `$WS/.claude/skills/` if missing (with a `created_dir: true`
   flag in output, so the caller can warn that a session restart may be
@@ -229,9 +235,10 @@ After the worktree flow, if frontmatter `skills:` is non-empty:
 
 ## Error Handling
 
-- Script: exit 1 + `{"error": "..."}` for fatal issues (unresolvable
-  workspace, missing PyYAML, unknown project, refusing to clobber);
-  partial per-repo issues go in `errors` arrays on exit 0.
+- Script: `{"status": "error", "error": "..."}` (exit 0) for fatal issues
+  (unresolvable workspace, missing PyYAML, unknown project, refusing to
+  clobber); partial per-repo issues go in `errors` arrays on
+  `status: ok` output.
 - Skills markdown: any `skills.py` failure degrades to "continue without
   skill linking" with the error surfaced — never abort project
   creation/resume/close.
