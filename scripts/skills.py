@@ -47,6 +47,21 @@ def fail(message: str) -> None:
     sys.exit(0)
 
 
+def is_safe_name(name: str) -> bool:
+    """True if `name` is safe to use as a single path component under
+    .claude/skills/ — i.e. it cannot escape that directory.
+
+    A repo controls its skills' frontmatter `name:`, so this must reject
+    anything containing a path separator or a dot-segment ("." or "..")
+    before it is ever joined onto a filesystem path.
+    """
+    if not name or not isinstance(name, str):
+        return False
+    if name in (".", ".."):
+        return False
+    return Path(name).name == name
+
+
 def parse_frontmatter(path: Path) -> dict[str, Any]:
     """Extract YAML frontmatter between --- delimiters."""
     try:
@@ -129,6 +144,11 @@ def cmd_scan(root: Path, repos: list[str]) -> dict:
                     f"{repo}: skill dir '{skill_dir.name}' has no usable "
                     f"frontmatter name: — skipped")
                 continue
+            if not is_safe_name(name):
+                errors.append(
+                    f"{repo}: skill dir '{skill_dir.name}' has an unsafe "
+                    f"frontmatter name '{name}' — skipped")
+                continue
             skills.append({
                 "name": name,
                 "description": str(fm.get("description", "")),
@@ -161,12 +181,17 @@ def cmd_scan(root: Path, repos: list[str]) -> dict:
 
 
 def cmd_link(root: Path, name: str, repo: str) -> dict:
+    if not is_safe_name(name):
+        fail(f"skill name '{name}' is not a valid skill name")
+
     skill_dir = find_skill_dir(root, repo, name)
     if skill_dir is None:
         fail(f"No skill with frontmatter name '{name}' found in "
              f"repos/{repo}/.claude/skills/")
 
     skills_dir = ws_skills_dir(root)
+    if skills_dir.exists() and not skills_dir.is_dir():
+        fail(f"{skills_dir} exists and is not a directory — refusing to link")
     created_dir = not skills_dir.is_dir()
     skills_dir.mkdir(parents=True, exist_ok=True)
 

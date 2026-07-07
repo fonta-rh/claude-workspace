@@ -188,6 +188,14 @@ class TestScan(SkillsFixture):
         out = run_skills(self.ws, "scan")
         self.assertEqual(out["status"], "error")
 
+    def test_scan_unsafe_name_reports_error(self):
+        self.make_repo_skill("repo-a", "pwned", "../../pwned")
+        out = run_skills(self.ws, "scan", "repo-a")
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(out["skills"], [])
+        self.assertEqual(len(out["errors"]), 1)
+        self.assertIn("pwned", out["errors"][0])
+
 
 class TestLink(SkillsFixture):
 
@@ -250,6 +258,20 @@ class TestLink(SkillsFixture):
         out = self.link("nope", "repo-a")
         self.assertEqual(out["status"], "error")
         self.assertIn("nope", out["error"])
+
+    def test_link_unsafe_name_is_error(self):
+        self.make_repo_skill("repo-a", "pwned", "../../pwned")
+        out = self.link("../../pwned", "repo-a")
+        self.assertEqual(out["status"], "error")
+        self.assertFalse((self.ws / "pwned").exists())
+        self.assertFalse(os.path.lexists(self.tmp / "pwned"))
+
+    def test_link_refuses_when_skills_path_is_a_file(self):
+        self.make_repo_skill("repo-a", "vet-review", "vet-review")
+        (self.ws / ".claude").mkdir(parents=True)
+        (self.ws / ".claude" / "skills").write_text("not a directory\n")
+        out = self.link("vet-review", "repo-a")
+        self.assertEqual(out["status"], "error")
 
 
 class TestWorkspaceResolution(unittest.TestCase):
