@@ -31,9 +31,10 @@ hooks/hooks.json                                  SessionStart → recent-projec
 scripts/setup.sh                                  Clone/update/init CLI (self-derives plugin root)
 scripts/workspace_lib.py                          Shared, yaml-free: resolve_workspace_root(), PLUGIN_ROOT
 scripts/{resume,consolidate,recent}-project*.py   Project tooling
+scripts/skills.py                                 Repo-skill symlink manager (scan/link/verify/unlink-check)
 domains/{example,tnf,lvm-operator}/               Bundled domains (read-only)
 templates/{dev-env.yaml.template, settings.local.json.tpl}
-tests/test_setup.sh                               Test suite
+tests/{test_setup.sh, test_skills.py}             Test suites
 ```
 
 ## Skills

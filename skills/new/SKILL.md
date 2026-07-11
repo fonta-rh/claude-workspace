@@ -155,6 +155,68 @@ Extract the repo and PR number, then create a worktree:
 3. Store `branch: pr/<number>` and the repo in worktrees list.
 4. Add the PR URL to `related_links:` in frontmatter.
 
+**1g. Repo Skill Linking (optional)**
+
+Repos may ship their own Claude Code skills in `.claude/skills/`. Surface
+them in workspace autocomplete by symlinking. Skip this step entirely
+(silently, no question) if no repos were selected in Step 1d.
+
+1. Run via Bash:
+
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/skills.py" scan <repo1> <repo2> ...
+   ```
+
+   with the repos selected in Step 1d. If the output has
+   `status: "error"` or an empty `skills` array, skip this step silently
+   (mention any `errors` entries briefly, but never block project
+   creation).
+
+2. Partition the scanned skills:
+   - `already_present.status == "same_source"` → already linked (by
+     another project). Do NOT ask about these; record them in the
+     `skills:` frontmatter (step 6 below) and mention the reuse in the
+     Step 4 summary.
+   - `already_present.status == "collision"` → not linkable (the name is
+     taken by something else at the workspace root). Exclude, and note
+     in the summary: "skill `<name>` skipped — name already in use".
+   - `already_present.status == "dangling"` or `null` → offer to link
+     (a dangling leftover symlink is replaced automatically).
+   - `conflict: true` → same skill name from multiple selected repos;
+     handle in step 4 below.
+
+3. If any offerable non-conflicted skills remain, present ONE
+   AskUserQuestion with multiSelect=true: label = skill `name`,
+   description = "`<description>` (from `<repo>`)". Nothing selected →
+   continue without linking.
+
+4. For each conflicted name, ask a separate single-select
+   AskUserQuestion: "Skill `<name>` is provided by multiple repos —
+   which one should be linked?" with one option per source repo plus
+   "Skip this skill". (Only one can own the name: symlinks can't rename
+   a skill, so the others stay unlinked.)
+
+5. For each chosen skill, run via Bash:
+
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/skills.py" link <name> <repo>
+   ```
+
+   - On `status: "error"`: report it and continue with the remaining
+     skills — never abort project creation.
+   - If any success output has `created_dir: true`, note for the Step 4
+     summary that a session restart is needed before these skills appear
+     in autocomplete (the watcher only monitors dirs that existed at
+     session start).
+
+6. Record every linked or reused skill for the frontmatter (Step 3b):
+
+   ```yaml
+   skills:
+     - name: <name>
+       source: <repo>
+   ```
+
 ## Step 2: Generate Folder Name
 
 Based on the gathered information:
@@ -242,7 +304,16 @@ After creating the project, provide a summary:
    >
    > When working on code changes, use the worktree paths above
    > instead of the main checkout (`$WS/repos/<repo>/`).
-3. Suggest relevant skills based on the task type:
+3. If skills were linked in Step 1g, list them:
+   > **Skills linked:**
+   > - `/<name>` (from `<repo>`)
+   >
+   > These are available in autocomplete now — no restart needed.
+
+   If `link` reported `created_dir: true`, say instead: "Restart the
+   session to pick up the new skills (the `.claude/skills/` directory
+   was just created)."
+4. Suggest relevant skills based on the task type:
 
 | Type | Skills to suggest |
 |------|-------------------|
@@ -252,8 +323,8 @@ After creating the project, provide a summary:
 | docs | `/feature-dev:feature-dev` |
 | analysis | `/pr-review-toolkit:review-pr`, `/prow-job:analyze-test-failure`, `/feature-dev:feature-dev` |
 
-4. Suggest concrete next steps for starting the work
-5. Remind the user they can resume this project later with
+5. Suggest concrete next steps for starting the work
+6. Remind the user they can resume this project later with
    `/workspace:resume`
 
 ---
@@ -286,6 +357,11 @@ worktrees:
 # worktrees: subset of repos that have active worktrees (from Step 1e)
 # branch: the branch name used for all worktrees
 # Omit both if no worktrees were created (ci-testing, analysis non-PR)
+skills:
+  - name: <skill-name>
+    source: <repo that provides it>
+# skills: repo skills linked into $WS/.claude/skills/ (from Step 1g)
+# Omit if no skills were linked
 related_links:
   - <any URLs provided>
 # If user provided no URLs, use: related_links: []
