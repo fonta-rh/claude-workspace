@@ -1,75 +1,123 @@
-# Dev Environment
+# workspace — Multi-Repo Workspace Manager (Claude Code plugin)
 
-A multi-repo workspace manager for AI-assisted development. Declare the repositories you need in a YAML manifest (`dev-env.yaml`), and this tool clones and organizes them, layers per-repo Claude context on top, and provides structured project workspaces for long-running tasks.
+An installable [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview)
+plugin for AI-assisted development across many repositories. Install it once,
+then from anywhere run `/workspace:setup-environment` to scaffold a workspace:
+declare the repos you need (via a **domain** or a custom config), and the
+plugin clones and organizes them, layers per-repo Claude context on top, and
+gives you structured project workspaces for long-running tasks.
 
-Ships with a **preset system** for common development scenarios — start with a bundled preset (the included ones target OpenShift components) or build your own custom environment for any domain.
+Ships with bundled domains for common scenarios (the included ones target
+OpenShift components) — or build your own for any domain.
+
+## Install
+
+From inside Claude Code:
+
+```
+/plugin marketplace add fonta-rh/multi-repo-dev-env
+/plugin install workspace@multi-repo-dev-env
+```
 
 ## Quick Start
 
-```bash
-# 1. Clone this repo as your workspace
-git clone <your-fork-url> my-workspace
-cd my-workspace
-
-# 2. Install Claude Code if you haven't already
-# https://docs.anthropic.com/en/docs/claude-code/overview
-
-# 3. Run Claude Code and use the setup skill
-claude
-> /dev-env-setup              # Interactive — picks a preset or builds a custom config
+```
+/workspace:setup-environment
 ```
 
-The `/dev-env-setup` skill walks you through everything: preset selection, repo cloning, context file distribution, and CLAUDE.md generation.
+The skill walks you through everything: it asks **where** to create the
+workspace, lets you pick a **domain** (or an external one by git URL), clones
+the repos, distributes context files, and generates the workspace's root
+`CLAUDE.md`. When it finishes, launch `claude` from inside the new workspace
+directory for future sessions.
 
-## How It Works
+To build a workspace from an arbitrary set of repos instead of a bundled
+domain, use `/workspace:create-domain`.
 
-1. **`/dev-env-setup`** is the entry point — it orchestrates the entire initialization
-2. **Presets** (`presets/`) provide ready-made configs with documentation and per-repo context
-3. **`dev-env.yaml`** defines which repos to clone (name, URL, branch, category, summary)
-4. **`CLAUDE.md`** gives Claude Code cross-repo context for AI-assisted development
-5. **Projects** (`projects/`) give structured workspaces for specific tasks
+## Skills
 
-### Setup Modes
+| Skill | Description |
+|-------|-------------|
+| `/workspace:setup-environment` | Set up or refresh a workspace from a domain |
+| `/workspace:create-domain` | Build a custom workspace from arbitrary repos, with collaboratively generated per-repo context |
+| `/workspace:new` | Create a new project workspace for a task (bug, feature, CI, docs, analysis) |
+| `/workspace:resume` | Resume an existing project — reload context and continue |
+| `/workspace:close` | Close a completed project and clean up its worktrees |
+| `/workspace:update` | Record what a session accomplished into the project docs |
+| `/workspace:consolidate` | Archive completed checklist items from a bloated project CLAUDE.md |
 
-- **From preset** (`/dev-env-setup`) — select a preset, clone its repos, distribute context files
-- **From scratch** (`/dev-env-setup custom`) — describe your project, add repos interactively, generate context collaboratively with Claude
+A SessionStart hook surfaces your recent projects whenever you launch Claude
+Code inside a workspace (it stays silent elsewhere).
 
-## Available Presets
+## Concepts
 
-| Preset | Description |
-|--------|-------------|
-| `tnf` | Two Nodes with Fencing — OpenShift HA with Pacemaker/Corosync |
-| `lvm-operator` | LVM Operator (LVMS) — Local storage using LVM/TopoLVM for OpenShift |
+- **Plugin root** — where the plugin ships (read-only). You never edit here.
+- **Workspace root** — the directory you choose during setup. It holds
+  `dev-env.yaml`, `repos/`, `projects/`, and any workspace-local `domains/`.
+- **Domain** — a reusable config: a `dev-env.yaml` repo list plus optional
+  per-repo context, supplemental CLAUDE.md files, and docs.
 
-Create your own preset by adding a directory under `presets/` with a `preset.yaml`, `dev-env.yaml`, and optional `context/` and `docs/` directories.
+### Domains
 
-## Claude Code Skills
+- **Bundled** — ship with the plugin (`tnf`, `lvm-operator`, `example`).
+- **External** — installed from a git URL into your workspace's `domains/`:
+  `/workspace:setup-environment` → "External domain (git URL)". A URL may
+  include a `#subdir` fragment for packs holding multiple domains.
+- **Authoring** — a domain is a directory with `domain.yaml` (name +
+  description), `dev-env.yaml` (repos), and optional `context/<repo>.md`,
+  `supplemental/<repo>.md`, `docs/`, and `settings.local.json.tpl`. Workspace
+  domains shadow bundled ones of the same name.
 
-| Skill | Usage | Description |
-|-------|-------|-------------|
-| `/dev-env-setup` | Initialize or refresh dev environment | Set up from preset or custom repos |
-| `/project:new` | Create a new project workspace | Structured workspace for a specific task |
-| `/project:resume` | Resume an existing project | Reload context and continue work |
-| `/project:close` | Close a completed project | Mark as done, add closing notes |
-| `/project:update` | Update project docs from session | Record progress to project CLAUDE.md |
+## dev-env.yaml
 
-## Configuration
-
-The `dev-env.yaml` file (generated by `/dev-env-setup`) uses this schema:
+Generated in your workspace by the setup skills. Schema:
 
 ```yaml
+domain:                    # auto-recorded by setup; enables refresh-domain
+  name: <domain-name>
+  source: bundled          # 'bundled' or the external git URL
+  # ref / subdir            # (external only)
+
 repos:
-  - name: my-repo
+  - name: my-repo          # identifier and directory name under repos/
     url: https://github.com/org/my-repo.git
-    directory: my-repo
     branch: main
-    category: development    # docs, development, testing, deployment, troubleshooting
+    category: development  # docs | development | testing | deployment | troubleshooting
     summary: "Brief description of the repo's role"
+    directory: my-repo     # (optional) overrides the directory name
 ```
 
-See `dev-env.yaml.template` for the full commented schema.
+Repos are cloned with `--filter=blob:none` (blobless): full structure visible,
+blob contents fetched on demand.
 
 ## Requirements
 
-- Git
+- Git (2.27+ for blobless clones)
+- Python 3.9+ with **PyYAML** (`pip3 install pyyaml`), *or* `yq` — needed to
+  parse `dev-env.yaml`/project frontmatter. The project tooling reports a clear
+  message if PyYAML is missing.
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview)
+
+## Upgrading from the pre-plugin version
+
+Earlier versions were cloned-and-run and installed a SessionStart hook into
+your workspace's `.claude/settings.local.json`. The hook now ships with the
+plugin, so **remove the stale `hooks` block** from that file to avoid a
+duplicate/failing hook:
+
+```jsonc
+// delete this block from .claude/settings.local.json
+"hooks": {
+  "SessionStart": [ { "hooks": [ { "type": "command",
+    "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/recent-projects.py" } ] } ]
+}
+```
+
+The old `/dev-env-setup` and `/project:*` commands are replaced by the
+`/workspace:*` skills above.
+
+## Developing the plugin
+
+See [CLAUDE.md](CLAUDE.md) for the layout, dev loop
+(`claude --plugin-dir .` + `/reload-plugins`), and test command
+(`bash tests/test_setup.sh`).

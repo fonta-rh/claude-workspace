@@ -3,13 +3,20 @@
 
 Used by the SessionStart hook to give Claude and the user quick context.
 Output: JSON with systemMessage (user-visible) and additionalContext (model context).
+
+Deliberately yaml-free: this runs on every SessionStart and plugins cannot
+declare python dependencies, so it must never import a third-party module.
 """
+
+from __future__ import annotations
 
 import json
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
+
+import workspace_lib
 
 
 def parse_frontmatter(claude_md: Path) -> dict[str, str]:
@@ -84,7 +91,11 @@ def collect_projects(projects_dir: Path) -> list[dict]:
 
 def main():
     """Entry point: output recent non-done projects as JSON or plain names."""
-    project_root = Path(os.environ.get("CLAUDE_PROJECT_DIR", Path(__file__).resolve().parent.parent))
+    # SessionStart hook: must stay silent (exit 0, no output) when not launched
+    # inside a workspace, so it never adds noise to unrelated projects.
+    project_root = workspace_lib.resolve_workspace_root()
+    if project_root is None:
+        sys.exit(0)
     projects_dir = project_root / "projects"
 
     if not projects_dir.is_dir():
@@ -107,7 +118,7 @@ def main():
     for i, e in enumerate(top, 1):
         lines.append(f"  {i:<3} {e['name']:<30} {e['type']:<14} {e['status']:<10} {e['date_str']}")
     lines.append("")
-    lines.append("  Tip: /project:resume <name-or-number>")
+    lines.append("  Tip: /workspace:resume <name-or-number>")
 
     output = "\n".join(lines)
     payload = {

@@ -9,14 +9,17 @@ last 3) archived to progress-archive.md. A pointer line replaces the
 archived items in CLAUDE.md.
 """
 
+from __future__ import annotations
+
 import json
-import os
 import re
 import sys
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any
+
+import workspace_lib
 
 THRESHOLD = 10
 KEEP_RECENT = 3
@@ -224,10 +227,16 @@ def consolidate(project_dir: Path, dry_run: bool = False) -> dict[str, Any]:
         })
 
     if dry_run:
+        # Cosmetic display path — fall back to the absolute path if the project
+        # dir isn't nested under a workspace root the way we expect.
+        try:
+            display_path = str(claude_md.relative_to(project_dir.parent.parent))
+        except ValueError:
+            display_path = str(claude_md)
         return {
             "status": "needs_consolidation",
             "project": project_name,
-            "claude_md_path": str(claude_md.relative_to(project_dir.parent.parent)),
+            "claude_md_path": display_path,
             "claude_md_lines": len(lines),
             "sections": section_info,
         }
@@ -259,7 +268,7 @@ def consolidate(project_dir: Path, dry_run: bool = False) -> dict[str, Any]:
             "# Progress Archive\n"
             "\n"
             "_Completed checklist items archived from CLAUDE.md by\n"
-            "`/project:consolidate`. Items grouped by source section,\n"
+            "`/workspace:consolidate`. Items grouped by source section,\n"
             "ordered chronologically (oldest first)._\n"
             "\n"
         )
@@ -333,10 +342,14 @@ def main():
         sys.exit(1)
 
     project_name = args[0]
-    root = Path(os.environ.get(
-        "CLAUDE_PROJECT_DIR",
-        Path(__file__).resolve().parent.parent,
-    ))
+    root = workspace_lib.resolve_workspace_root()
+    if root is None:
+        print(json.dumps({
+            "status": "error",
+            "message": "Could not determine the workspace root. Set WORKSPACE_ROOT "
+                       "or run inside a workspace (a directory containing dev-env.yaml).",
+        }))
+        sys.exit(1)
     project_dir = root / "projects" / project_name
 
     if not project_dir.is_dir():
