@@ -1,5 +1,5 @@
 ---
-name: new
+name: new-project
 description: Create a new project workspace for a development task (bug, feature, CI, docs, analysis)
 argument-hint: [description]
 ---
@@ -229,7 +229,7 @@ Based on the gathered information:
 3. **Check if `$WS/projects/<suggestion>/` already exists** using ls. If it
    does, inform the user and ask:
    - Use a different name (suggest appending `-2`, `-3`, etc.)
-   - Resume the existing project instead (point them to `/workspace:resume`)
+   - Resume the existing project instead (point them to `/workspace:resume-project`)
 4. Once you have a name that doesn't conflict, present the suggestion
    and ask the user to confirm or provide an alternative:
 
@@ -325,7 +325,7 @@ After creating the project, provide a summary:
 
 5. Suggest concrete next steps for starting the work
 6. Remind the user they can resume this project later with
-   `/workspace:resume`
+   `/workspace:resume-project`
 
 ---
 
@@ -338,7 +338,7 @@ when resuming the project.
 
 ### Common Frontmatter
 
-Valid `status` values: `active`, `blocked`, `done` (set only by `/workspace:close`).
+Valid `status` values: `active`, `blocked`, `done` (set only by `/workspace:close-project`).
 
 ```yaml
 ---
@@ -395,7 +395,7 @@ these sections in order:
 5. **`## Progress`** — high-level checklist starting with
    `- [x] Project created`, then type-specific milestone items
    (see below, all unchecked). Stays in CLAUDE.md because
-   `/workspace:resume` reads it to suggest next steps.
+   `/workspace:resume-project` reads it to suggest next steps.
 
 ### Type-Specific Content
 

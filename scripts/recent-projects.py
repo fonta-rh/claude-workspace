@@ -118,7 +118,7 @@ def main():
     for i, e in enumerate(top, 1):
         lines.append(f"  {i:<3} {e['name']:<30} {e['type']:<14} {e['status']:<10} {e['date_str']}")
     lines.append("")
-    lines.append("  Tip: /workspace:resume <name-or-number>")
+    lines.append("  Tip: /workspace:resume-project <name-or-number>")
 
     output = "\n".join(lines)
     payload = {

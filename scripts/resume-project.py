@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve a project and return structured context for /workspace:resume and /workspace:close.
+"""Resolve a project and return structured context for /workspace:resume-project and /workspace:close-project.
 
 Usage: resume-project.py [project-name-or-number]
 Output: JSON to stdout (see resolve_project for schema).

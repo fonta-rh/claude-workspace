@@ -1,5 +1,5 @@
 ---
-name: resume
+name: resume-project
 description: Resume an existing project workspace — reload its context and continue work
 argument-hint: [name-or-number]
 ---

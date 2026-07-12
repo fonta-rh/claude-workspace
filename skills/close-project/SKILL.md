@@ -1,5 +1,5 @@
 ---
-name: close
+name: close-project
 description: Close a project workspace, mark it done, and clean up its worktrees
 argument-hint: "[name-or-number] [closing notes]"
 ---
@@ -26,7 +26,7 @@ by `status`:
 - **`ok`** — use `project.name` as the target. All paths in `project` are
   **absolute** — use them directly in Read/Bash (no joining). Proceed to 1b.
 - **`no_argument`** — check if a project was loaded earlier in this
-  conversation (e.g., via `/workspace:resume`). If so, use that project
+  conversation (e.g., via `/workspace:resume-project`). If so, use that project
   name as the default: re-run the script with that name and proceed.
   Otherwise, present the first 3 `alternatives` as AskUserQuestion
   options plus "See all projects". Re-run with the chosen name.
@@ -215,7 +215,7 @@ Project `<name>` marked as done.
 
 If closing notes were added, include them in the confirmation.
 Remind the user that closed projects won't appear in the SessionStart
-summary, but can still be resumed with `/workspace:resume <name>`.
+summary, but can still be resumed with `/workspace:resume-project <name>`.
 
 ---
 
@@ -225,4 +225,4 @@ summary, but can still be resumed with `/workspace:resume <name>`.
 - Never delete the project directory — closing just updates metadata
 - Use today's date for the `closed` field
 - The project will be filtered from the SessionStart "Recent projects"
-  table but remains fully accessible via `/workspace:resume`
+  table but remains fully accessible via `/workspace:resume-project`
