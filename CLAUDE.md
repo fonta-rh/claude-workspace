@@ -43,11 +43,11 @@ tests/{test_setup.sh, test_skills.py}             Test suites
 |-------|-------------|
 | `/workspace:setup-environment` | Set up / refresh a workspace from a domain |
 | `/workspace:create-domain` | Build a custom workspace from arbitrary repos |
-| `/workspace:new` | Create a new project workspace for a task |
-| `/workspace:resume` | Resume an existing project |
-| `/workspace:close` | Close a completed project (worktree cleanup) |
-| `/workspace:update` | Update project docs from the session |
-| `/workspace:consolidate` | Archive completed checklist items |
+| `/workspace:new-project` | Create a new project workspace for a task |
+| `/workspace:resume-project` | Resume an existing project |
+| `/workspace:close-project` | Close a completed project (worktree cleanup) |
+| `/workspace:update-project` | Update project docs from the session |
+| `/workspace:consolidate-project` | Archive completed checklist items |
 
 ## Key Conventions
 

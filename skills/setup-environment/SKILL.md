@@ -172,8 +172,8 @@ upstream repository.
 ## Worktree Convention
 
 Projects that modify source repos use git worktrees for branch isolation:
-`repos/<repo>/.worktrees/<branch-name>/`. Created by `/workspace:new`,
-shown by `/workspace:resume`, cleaned up by `/workspace:close`. When a
+`repos/<repo>/.worktrees/<branch-name>/`. Created by `/workspace:new-project`,
+shown by `/workspace:resume-project`, cleaned up by `/workspace:close-project`. When a
 project has worktrees, use the worktree path for modifications; the main
 checkout stays on the default branch for reference.
 
@@ -194,11 +194,11 @@ checkout stays on the default branch for reference.
 |-------|-------------|
 | `/workspace:setup-environment` | Set up or refresh the workspace from a domain |
 | `/workspace:create-domain` | Build a custom workspace from arbitrary repos |
-| `/workspace:new` | Create a new project workspace for a task |
-| `/workspace:resume` | Resume an existing project |
-| `/workspace:close` | Close a completed project |
-| `/workspace:update` | Update project docs from the session |
-| `/workspace:consolidate` | Archive completed checklist items |
+| `/workspace:new-project` | Create a new project workspace for a task |
+| `/workspace:resume-project` | Resume an existing project |
+| `/workspace:close-project` | Close a completed project |
+| `/workspace:update-project` | Update project docs from the session |
+| `/workspace:consolidate-project` | Archive completed checklist items |
 
 ## Domain Docs
 
@@ -217,7 +217,7 @@ Present a summary to the user:
 - Pointer to domain docs if present
 - **Next step:** "Launch `claude` from inside `$WS` for future sessions —
   the SessionStart hook will surface recent projects there, and
-  `/workspace:new` will scaffold tasks in that workspace."
+  `/workspace:new-project` will scaffold tasks in that workspace."
 
 ---
 

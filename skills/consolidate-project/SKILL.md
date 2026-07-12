@@ -1,5 +1,5 @@
 ---
-name: consolidate
+name: consolidate-project
 description: Consolidate a bloated project CLAUDE.md by archiving completed checklist items
 argument-hint: [name-or-number]
 ---

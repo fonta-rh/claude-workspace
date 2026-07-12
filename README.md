@@ -40,11 +40,11 @@ domain, use `/workspace:create-domain`.
 |-------|-------------|
 | `/workspace:setup-environment` | Set up or refresh a workspace from a domain |
 | `/workspace:create-domain` | Build a custom workspace from arbitrary repos, with collaboratively generated per-repo context |
-| `/workspace:new` | Create a new project workspace for a task (bug, feature, CI, docs, analysis) |
-| `/workspace:resume` | Resume an existing project — reload context and continue |
-| `/workspace:close` | Close a completed project and clean up its worktrees |
-| `/workspace:update` | Record what a session accomplished into the project docs |
-| `/workspace:consolidate` | Archive completed checklist items from a bloated project CLAUDE.md |
+| `/workspace:new-project` | Create a new project workspace for a task (bug, feature, CI, docs, analysis) |
+| `/workspace:resume-project` | Resume an existing project — reload context and continue |
+| `/workspace:close-project` | Close a completed project and clean up its worktrees |
+| `/workspace:update-project` | Record what a session accomplished into the project docs |
+| `/workspace:consolidate-project` | Archive completed checklist items from a bloated project CLAUDE.md |
 
 A SessionStart hook surfaces your recent projects whenever you launch Claude
 Code inside a workspace (it stays silent elsewhere).

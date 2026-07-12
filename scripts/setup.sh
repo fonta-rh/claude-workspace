@@ -719,7 +719,7 @@ apply_settings_template() {
 
 # Pre-create the workspace's .claude/skills/ so Claude Code's filesystem
 # watcher (which only monitors directories that exist at session start)
-# picks up skill symlinks live. Used by /workspace:new skill linking.
+# picks up skill symlinks live. Used by /workspace:new-project skill linking.
 ensure_skills_dir() {
     local skills_dir="$WORKSPACE_ROOT_RESOLVED/.claude/skills"
     if [[ ! -d "$skills_dir" ]]; then

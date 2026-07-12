@@ -268,7 +268,7 @@ def consolidate(project_dir: Path, dry_run: bool = False) -> dict[str, Any]:
             "# Progress Archive\n"
             "\n"
             "_Completed checklist items archived from CLAUDE.md by\n"
-            "`/workspace:consolidate`. Items grouped by source section,\n"
+            "`/workspace:consolidate-project`. Items grouped by source section,\n"
             "ordered chronologically (oldest first)._\n"
             "\n"
         )

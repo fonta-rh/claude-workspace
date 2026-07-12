@@ -1,5 +1,5 @@
 ---
-name: update
+name: update-project
 description: Update project documentation from what was accomplished in this session
 argument-hint: [name-or-number]
 ---
@@ -16,7 +16,7 @@ current conversation. Apply edits directly.
 results, plans, etc.).
 
 **NEVER touch during this command:**
-- The `status:` frontmatter field — use `/workspace:close` to change it
+- The `status:` frontmatter field — use `/workspace:close-project` to change it
 - Memory files (`memory/MEMORY.md`, `memory/project_*.md`)
 - Internal session tasks (TaskCreate / TaskUpdate)
 - Repo source files under `repos/`
@@ -24,7 +24,7 @@ results, plans, etc.).
 ## Step 1: Resolve Project
 
 Use the project already loaded in this conversation (from
-`/workspace:resume` or any earlier project interaction). If `$ARGUMENTS`
+`/workspace:resume-project` or any earlier project interaction). If `$ARGUMENTS`
 has a token, use that as the project name instead.
 
 If no project is in context and no argument was given, ask which project.
