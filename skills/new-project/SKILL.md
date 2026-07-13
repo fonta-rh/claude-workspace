@@ -65,6 +65,17 @@ say 'no'."
 
 **1d. Related Repositories**
 
+**Single-repo self-workspace check:** if `$WS/dev-env.yaml` has a
+top-level `self:` block, this workspace wraps the repo it lives in.
+Note `self.name` and `self.summary` for the Step 4 summary, then **skip
+steps 1d, 1e, and 1g entirely** — no repo selection (the repo is
+implicit), no worktrees (edit-in-place: code changes happen directly in
+the checkout on a branch the user picks), and no skill linking (the
+repo's `.claude/skills/` already is the workspace's). In step 1f, do not
+create PR worktrees — record any PR URL in `related_links:` only. The
+project frontmatter uses `repos: []` and omits `branch:`, `worktrees:`,
+and `skills:`.
+
 Ask which repos from this workspace are relevant. **Dynamically load
 the repo list** from `$WS/dev-env.yaml`:
 
@@ -304,6 +315,11 @@ After creating the project, provide a summary:
    >
    > When working on code changes, use the worktree paths above
    > instead of the main checkout (`$WS/repos/<repo>/`).
+
+2b. In a single-repo self-workspace, remind instead: code changes happen
+    directly in this checkout — suggest creating a git branch named after
+    the project folder before starting.
+
 3. If skills were linked in Step 1g, list them:
    > **Skills linked:**
    > - `/<name>` (from `<repo>`)
