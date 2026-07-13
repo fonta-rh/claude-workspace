@@ -1,6 +1,6 @@
 ---
 name: setup-environment
-description: Set up or refresh a multi-repo workspace from a domain — pick a location, choose a domain, clone repos, distribute context
+description: Set up or refresh a workspace — multi-repo from a domain (pick a location, clone repos, distribute context) or a single-repo self-workspace wrapping the current checkout
 argument-hint: "[<git-url>]"
 ---
 
@@ -11,6 +11,12 @@ from a **domain** (a bundled or external config of repos + context). This
 skill picks a location for the workspace, clones repos, distributes context
 files, and generates the workspace's root CLAUDE.md.
 
+Two modes exist. **Multi-repo (domain)**: a user-chosen directory gets
+`dev-env.yaml`, cloned repos under `repos/`, and distributed context.
+**Single-repo (self)**: the workspace root IS an existing repo checkout —
+no domain, no cloning, and the plugin's only footprint is `dev-env.yaml`,
+`projects/`, and `.claude/settings.local.json`. Step 0 picks the mode.
+
 The plugin ships read-only at `${CLAUDE_PLUGIN_ROOT}`. The **workspace** is a
 separate, user-chosen directory. All `setup.sh` calls therefore pass
 `--workspace "$WS"` explicitly — do not rely on the current directory, which
@@ -19,7 +25,27 @@ during this skill is the launch dir, not the chosen workspace.
 To build a fully custom workspace from arbitrary repos (no bundled domain),
 use `/workspace:create-domain` instead.
 
-## Step 0: Choose the Workspace Location
+## Step 0: Choose the Mode
+
+**If `$ARGUMENTS` is a git URL**, skip this question — that is an external
+domain (multi-repo path); go to Step 0a.
+
+Check whether the launch directory is inside a git repository:
+
+```bash
+git rev-parse --show-toplevel 2>/dev/null
+```
+
+- **If it is**, and that repo root has no `dev-env.yaml` yet, ask via
+  AskUserQuestion:
+  - **"Wrap this repo (`<basename of repo root>`) as a single-repo
+    workspace"** — set `$WS` = the repo root and jump to the
+    [Self-Repo Path](#self-repo-path-single-repo-workspace).
+  - **"Multi-repo workspace from a domain"** — continue with Step 0a.
+- **If it is not a git repo** (or the repo root already has a
+  `dev-env.yaml`), continue with Step 0a.
+
+## Step 0a: Choose the Workspace Location (multi-repo path)
 
 Decide where the workspace will live and store it as `$WS`.
 
@@ -43,6 +69,9 @@ skip Step 1 — use the URL directly in Step 2.
 ## Step 0.5: Check for an Existing Domain (refresh path)
 
 Check if `$WS/dev-env.yaml` already exists and contains a `domain:` block.
+If it exists and contains a top-level `self:` block instead, this is a
+single-repo self-workspace — tell the user it is already set up (there is
+no domain to refresh; `dev-env.yaml` is edited directly) and stop.
 If it does, read the `source` field and offer via AskUserQuestion:
 
 - **"Re-initialize (keep current domain)"** — refresh from the recorded
@@ -218,6 +247,64 @@ Present a summary to the user:
 - **Next step:** "Launch `claude` from inside `$WS` for future sessions —
   the SessionStart hook will surface recent projects there, and
   `/workspace:new-project` will scaffold tasks in that workspace."
+
+## Self-Repo Path (single-repo workspace)
+
+No domain, no cloning. **Never read or modify the repo's own CLAUDE.md** —
+orientation for future sessions comes from the SessionStart hook (recent
+projects), per-project CLAUDE.md files, and `dev-env.yaml`.
+
+### S1: Initialize
+
+Run via Bash (`<name>` = the repo root's basename; confirm with the user
+first if it looks generic, e.g. `src` or `repo`):
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh" --workspace "$WS" init --self <name>
+```
+
+If it refuses because `dev-env.yaml` already exists, the workspace is
+already initialized — tell the user and stop.
+
+### S2: Fill in the summary
+
+Suggest a one-line summary of the repo from its `README.md` (Read tool),
+or ask the user if there is none. Confirm it, then Edit
+`$WS/dev-env.yaml`, replacing `summary: ""` in the `self:` block with the
+confirmed line (YAML-quoted).
+
+### S3: projects/ tracking
+
+Ask via AskUserQuestion whether per-task project docs under `projects/`
+should be tracked in git:
+
+- **"Track in git (Recommended)"** — project docs are real docs; nothing
+  to do.
+- **"Ignore"** — append a `projects/` line to `$WS/.gitignore` (Edit, or
+  Write if the file doesn't exist).
+
+### S4: Summary
+
+Present:
+
+- What was created: `dev-env.yaml` (self block), `projects/`,
+  `.claude/settings.local.json`.
+- The isolation model: edit-in-place — `/workspace:new-project` creates
+  context/tracking projects under `projects/`; code changes happen
+  directly in this checkout on whatever branch the user picks.
+- **Next step:** "Launch `claude` from `$WS` for future sessions — the
+  SessionStart hook will surface recent projects."
+- Offer — **print, never write** — a snippet the user may paste into
+  their repo's CLAUDE.md:
+
+  ```markdown
+  ## Task Workflow
+
+  Per-task context lives under `projects/<task>/`, managed by the
+  `workspace` plugin: `/workspace:new-project` scaffolds a task,
+  `/workspace:resume-project` reloads one. Launch `claude` from the repo
+  root so the workspace resolves.
+  ```
 
 ---
 
