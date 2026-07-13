@@ -33,7 +33,7 @@ scripts/workspace_lib.py                          Shared, yaml-free: resolve_wor
 scripts/{resume,consolidate,recent}-project*.py   Project tooling
 scripts/skills.py                                 Repo-skill symlink manager (scan/link/verify/unlink-check)
 domains/{example,tnf,lvm-operator}/               Bundled domains (read-only)
-templates/{dev-env.yaml.template, settings.local.json.tpl}
+templates/{dev-env.yaml.template, dev-env-self.yaml.template, settings.local.json.tpl}
 tests/{test_setup.sh, test_skills.py}             Test suites
 ```
 
@@ -62,6 +62,12 @@ tests/{test_setup.sh, test_skills.py}             Test suites
   `recent-projects.py` stay yaml-free so the SessionStart hook never needs it.
 - Python scripts target **python3.9+** (macOS system python); they use
   `from __future__ import annotations` so `X | None` hints don't break there.
+- **Single-repo self-workspaces**: a top-level `self:` block (`name`,
+  `summary`) in `dev-env.yaml` marks a workspace whose root IS the wrapped
+  repo checkout (`setup.sh init --self`). Mutually exclusive with
+  `domain:`; `repos:` keeps its normal meaning (usually `[]`). Detection
+  in bash is grep-based (`has_self_block`). The plugin never touches the
+  wrapped repo's CLAUDE.md.
 
 ## Dev Loop
 
