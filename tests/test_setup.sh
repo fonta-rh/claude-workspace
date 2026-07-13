@@ -396,6 +396,44 @@ assert_output_contains "walk-up found workspace (repo listed)" "gitignore" "$out
 
 cleanup "$ws"
 
+# ── 13. init --self (single-repo self-workspace) ──────────────────────────────
+group "init --self (single-repo self-workspace)"
+
+plugin=$(new_plugin)
+ws=$(new_workspace)
+git init -q -b main "$ws"
+
+assert_success "init --self succeeds in a git repo root" \
+    run_setup "$plugin" "$ws" init --self myrepo
+assert_file   "creates dev-env.yaml" "$ws/dev-env.yaml"
+assert_contains "dev-env.yaml has a self: block" "$ws/dev-env.yaml" "^self:"
+assert_contains "self block records the repo name" "$ws/dev-env.yaml" "name: myrepo"
+assert_contains "repos list is empty" "$ws/dev-env.yaml" "^repos: \[\]"
+assert_not_contains "no domain block" "$ws/dev-env.yaml" "^domain:"
+assert_dir  "creates projects/" "$ws/projects"
+assert_dir  "creates .claude/skills/" "$ws/.claude/skills"
+assert_file "creates settings.local.json from template" "$ws/.claude/settings.local.json"
+
+assert_failure "second init --self refuses (dev-env.yaml exists)" \
+    run_setup "$plugin" "$ws" init --self myrepo
+
+assert_success "clone is a clean no-op with empty repos" \
+    run_setup "$plugin" "$ws" clone
+
+cleanup "$ws"
+
+ws=$(new_workspace)
+git init -q -b main "$ws"
+run_setup "$plugin" "$ws" init --self >/dev/null 2>&1
+assert_contains "name defaults to the workspace basename" \
+    "$ws/dev-env.yaml" "name: $(basename "$ws")"
+cleanup "$ws"
+
+ws=$(new_workspace)
+assert_failure "init --self refuses a non-git directory" \
+    run_setup "$plugin" "$ws" init --self myrepo
+cleanup "$ws" "$plugin"
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 
 cleanup "$PLUGIN"

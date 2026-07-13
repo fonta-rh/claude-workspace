@@ -12,6 +12,7 @@
 #   setup.sh --workspace <path> init <name>       Initialize from a bundled domain
 #   setup.sh --workspace <path> init <url>        Initialize from an external domain git URL
 #   setup.sh --workspace <path> init <url#subdir> External pack repo with multiple domains
+#   setup.sh --workspace <path> init --self [<name>] Initialize a single-repo self-workspace
 #   setup.sh --workspace <path> clone             Clone all repos (first time setup)
 #   setup.sh --workspace <path> clone <dir>       Clone a specific repo by directory name
 #   setup.sh --workspace <path> update            Update all repos (git pull)
@@ -795,6 +796,42 @@ init_domain() {
     log_info "  setup.sh --workspace $WORKSPACE_ROOT_RESOLVED status   — Check repo status"
 }
 
+# ─── Init Self (single-repo workspace) ───────────────────────────────────────
+# The workspace root IS the wrapped repo checkout. No domain, nothing to
+# clone; dev-env.yaml gets a self: block and an empty repos list.
+
+init_self() {
+    local name="${1:-}"
+
+    if [[ ! -d "$WORKSPACE_ROOT_RESOLVED/.git" ]]; then
+        log_error "Not a git repository root: $WORKSPACE_ROOT_RESOLVED"
+        log_info "A self-workspace wraps an existing repo checkout."
+        log_info "Run with --workspace pointing at the repo root."
+        exit 1
+    fi
+
+    if [[ -f "$DEV_ENV_YAML" ]]; then
+        log_error "dev-env.yaml already exists: $DEV_ENV_YAML"
+        log_info "This workspace is already initialized. Edit the file directly,"
+        log_info "or remove it and re-run 'init --self' to start over."
+        exit 1
+    fi
+
+    [[ -z "$name" ]] && name="$(basename "$WORKSPACE_ROOT_RESOLVED")"
+
+    sed "s/__SELF_NAME__/$name/" "$TEMPLATES_DIR/dev-env-self.yaml.template" \
+        > "$DEV_ENV_YAML"
+    log_success "Initialized dev-env.yaml (self-workspace: $name)"
+
+    mkdir -p "$WORKSPACE_ROOT_RESOLVED/projects"
+    apply_settings_template ""
+
+    echo
+    log_info "Next steps:"
+    log_info "  Fill in self.summary in dev-env.yaml"
+    log_info "  /workspace:new-project — scaffold a task under projects/"
+}
+
 # ─── Refresh Domain ──────────────────────────────────────────────────────────
 
 refresh_domain() {
@@ -860,6 +897,8 @@ usage() {
     echo "  init <name>           Initialize from a bundled/workspace domain"
     echo "  init <url>            Initialize from an external domain git URL"
     echo "  init <url#subdir>     External pack containing multiple domains"
+    echo "  init --self [<name>]  Initialize a single-repo self-workspace"
+    echo "                        (workspace root = the repo checkout; no domain)"
     echo "  clone                 Clone all repos (first time setup)"
     echo "  clone <dir>           Clone a specific repo by directory name"
     echo "  update                Update all repos (git pull)"
@@ -907,7 +946,11 @@ main() {
     case "$action" in
         init)
             resolve_workspace_root create
-            init_domain "$target"
+            if [[ "$target" == "--self" ]]; then
+                init_self "${3:-}"
+            else
+                init_domain "$target"
+            fi
             ensure_skills_dir
             ;;
         refresh-domain)
