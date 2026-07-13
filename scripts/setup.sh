@@ -218,6 +218,13 @@ print('|'.join([
     echo "|||"
 }
 
+# Returns 0 if a dev-env.yaml declares a top-level self: block (single-repo
+# self-workspace). grep-based so it needs no YAML parser (hook-safe).
+has_self_block() {
+    local yaml_file="${1:-$DEV_ENV_YAML}"
+    grep -q '^self:' "$yaml_file" 2>/dev/null
+}
+
 # ─── Repo Source Detection ────────────────────────────────────────────────────
 # Verifies dev-env.yaml exists, sets REPO_SOURCE and ACTIVE_DOMAIN_NAME.
 
@@ -230,6 +237,11 @@ detect_repo_source() {
         local domain_info
         domain_info=$(parse_yaml_domain "$DEV_ENV_YAML")
         ACTIVE_DOMAIN_NAME="${domain_info%%|*}"
+        if [[ -n "$ACTIVE_DOMAIN_NAME" ]] && has_self_block; then
+            log_error "dev-env.yaml declares both 'self:' and 'domain:' — they are mutually exclusive."
+            log_info "Remove one of the two blocks from: $DEV_ENV_YAML"
+            exit 1
+        fi
     else
         log_error "No dev-env.yaml found in workspace: $WORKSPACE_ROOT_RESOLVED"
         log_info "Options:"
@@ -837,6 +849,12 @@ init_self() {
 refresh_domain() {
     if [[ ! -f "$DEV_ENV_YAML" ]]; then
         log_error "No dev-env.yaml found. Run 'init' first."
+        exit 1
+    fi
+
+    if has_self_block; then
+        log_error "This is a single-repo self-workspace — no domain to refresh."
+        log_info "Self-workspaces have no domain; edit dev-env.yaml directly."
         exit 1
     fi
 

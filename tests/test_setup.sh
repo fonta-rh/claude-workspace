@@ -434,6 +434,29 @@ assert_failure "init --self refuses a non-git directory" \
     run_setup "$plugin" "$ws" init --self myrepo
 cleanup "$ws" "$plugin"
 
+# ─── Self-mode guards ─────────────────────────────────────────────────────────
+
+group "self-mode guards"
+
+plugin=$(new_plugin)
+ws=$(new_workspace)
+git init -q -b main "$ws"
+run_setup "$plugin" "$ws" init --self myrepo >/dev/null 2>&1
+
+out=$(run_setup "$plugin" "$ws" refresh-domain 2>&1)
+assert_failure "refresh-domain refuses on a self workspace" \
+    run_setup "$plugin" "$ws" refresh-domain
+assert_output_contains "refresh-domain explains it is a self workspace" \
+    "single-repo" "$out"
+
+printf 'domain:\n  name: fake\n  source: bundled\n' >> "$ws/dev-env.yaml"
+assert_failure "clone rejects self: and domain: together" \
+    run_setup "$plugin" "$ws" clone
+out=$(run_setup "$plugin" "$ws" clone 2>&1)
+assert_output_contains "mutual-exclusion error names both blocks" \
+    "mutually exclusive" "$out"
+cleanup "$ws" "$plugin"
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 
 cleanup "$PLUGIN"
