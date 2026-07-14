@@ -831,8 +831,31 @@ init_self() {
 
     [[ -z "$name" ]] && name="$(basename "$WORKSPACE_ROOT_RESOLVED")"
 
-    sed "s/__SELF_NAME__/$name/" "$TEMPLATES_DIR/dev-env-self.yaml.template" \
-        > "$DEV_ENV_YAML"
+    # Safely substitute __SELF_NAME__ with the provided name, handling sed
+    # metacharacters (/, &, \). Write to a temp file first to avoid truncating
+    # dev-env.yaml on substitution failure.
+    local tmp_dev_env name_escaped
+    tmp_dev_env=$(mktemp) || { log_error "Cannot create temporary file"; return 1; }
+
+    # Escape sed metacharacters in the name: \ -> \\, & -> \&, / -> \/
+    # Process in order to avoid double-escaping.
+    name_escaped="$name"
+    name_escaped="${name_escaped//\\/\\\\}"
+    name_escaped="${name_escaped//&/\\&}"
+    name_escaped="${name_escaped//\//\\/}"
+
+    if ! sed "s/__SELF_NAME__/$name_escaped/" "$TEMPLATES_DIR/dev-env-self.yaml.template" > "$tmp_dev_env"; then
+        rm -f "$tmp_dev_env"
+        log_error "Failed to substitute name in template"
+        return 1
+    fi
+
+    if ! mv "$tmp_dev_env" "$DEV_ENV_YAML"; then
+        rm -f "$tmp_dev_env"
+        log_error "Failed to create dev-env.yaml"
+        return 1
+    fi
+
     log_success "Initialized dev-env.yaml (self-workspace: $name)"
 
     mkdir -p "$WORKSPACE_ROOT_RESOLVED/projects"

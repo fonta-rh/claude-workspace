@@ -434,6 +434,49 @@ assert_failure "init --self refuses a non-git directory" \
     run_setup "$plugin" "$ws" init --self myrepo
 cleanup "$ws" "$plugin"
 
+# ── 14. init --self with metacharacter-bearing names ─────────────────────────────
+group "init --self with metacharacter-bearing names"
+
+plugin=$(new_plugin)
+
+# Test with & (ampersand) metacharacter
+ws=$(new_workspace)
+git init -q -b main "$ws"
+assert_success "init --self with & in name succeeds" \
+    run_setup "$plugin" "$ws" init --self "lib&api"
+assert_file   "dev-env.yaml created with & in name" "$ws/dev-env.yaml"
+assert_contains "& is literal in dev-env.yaml" "$ws/dev-env.yaml" "name: lib&api"
+cleanup "$ws"
+
+# Test with / (forward slash) metacharacter
+ws=$(new_workspace)
+git init -q -b main "$ws"
+assert_success "init --self with / in name succeeds" \
+    run_setup "$plugin" "$ws" init --self "a/b"
+assert_file   "dev-env.yaml created with / in name" "$ws/dev-env.yaml"
+assert_contains "/ is literal in dev-env.yaml" "$ws/dev-env.yaml" "name: a/b"
+cleanup "$ws"
+
+# Test with \ (backslash) metacharacter
+ws=$(new_workspace)
+git init -q -b main "$ws"
+assert_success "init --self with \\ in name succeeds" \
+    run_setup "$plugin" "$ws" init --self 'a\b'
+assert_file   "dev-env.yaml created with \\ in name" "$ws/dev-env.yaml"
+assert_contains "\\ is literal in dev-env.yaml" "$ws/dev-env.yaml" 'name: a\\b'
+cleanup "$ws"
+
+# Test with multiple metacharacters combined
+ws=$(new_workspace)
+git init -q -b main "$ws"
+assert_success "init --self with multiple metacharacters succeeds" \
+    run_setup "$plugin" "$ws" init --self 'api/v2&old'
+assert_file   "dev-env.yaml created with / and & together" "$ws/dev-env.yaml"
+assert_contains "multiple metacharacters are literal" "$ws/dev-env.yaml" 'name: api/v2&old'
+cleanup "$ws"
+
+cleanup "$plugin"
+
 # ─── Self-mode guards ─────────────────────────────────────────────────────────
 
 group "self-mode guards"
