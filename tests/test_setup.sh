@@ -396,6 +396,110 @@ assert_output_contains "walk-up found workspace (repo listed)" "gitignore" "$out
 
 cleanup "$ws"
 
+# ── 13. init --self (single-repo self-workspace) ──────────────────────────────
+group "init --self (single-repo self-workspace)"
+
+plugin=$(new_plugin)
+ws=$(new_workspace)
+git init -q -b main "$ws"
+
+assert_success "init --self succeeds in a git repo root" \
+    run_setup "$plugin" "$ws" init --self myrepo
+assert_file   "creates dev-env.yaml" "$ws/dev-env.yaml"
+assert_contains "dev-env.yaml has a self: block" "$ws/dev-env.yaml" "^self:"
+assert_contains "self block records the repo name" "$ws/dev-env.yaml" "name: myrepo"
+assert_contains "repos list is empty" "$ws/dev-env.yaml" "^repos: \[\]"
+assert_not_contains "no domain block" "$ws/dev-env.yaml" "^domain:"
+assert_dir  "creates projects/" "$ws/projects"
+assert_dir  "creates .claude/skills/" "$ws/.claude/skills"
+assert_file "creates settings.local.json from template" "$ws/.claude/settings.local.json"
+
+assert_failure "second init --self refuses (dev-env.yaml exists)" \
+    run_setup "$plugin" "$ws" init --self myrepo
+
+assert_success "clone is a clean no-op with empty repos" \
+    run_setup "$plugin" "$ws" clone
+
+cleanup "$ws"
+
+ws=$(new_workspace)
+git init -q -b main "$ws"
+run_setup "$plugin" "$ws" init --self >/dev/null 2>&1
+assert_contains "name defaults to the workspace basename" \
+    "$ws/dev-env.yaml" "name: $(basename "$ws")"
+cleanup "$ws"
+
+ws=$(new_workspace)
+assert_failure "init --self refuses a non-git directory" \
+    run_setup "$plugin" "$ws" init --self myrepo
+cleanup "$ws" "$plugin"
+
+# ── 14. init --self with metacharacter-bearing names ─────────────────────────────
+group "init --self with metacharacter-bearing names"
+
+plugin=$(new_plugin)
+
+# Test with & (ampersand) metacharacter
+ws=$(new_workspace)
+git init -q -b main "$ws"
+assert_success "init --self with & in name succeeds" \
+    run_setup "$plugin" "$ws" init --self "lib&api"
+assert_file   "dev-env.yaml created with & in name" "$ws/dev-env.yaml"
+assert_contains "& is literal in dev-env.yaml" "$ws/dev-env.yaml" "name: lib&api"
+cleanup "$ws"
+
+# Test with / (forward slash) metacharacter
+ws=$(new_workspace)
+git init -q -b main "$ws"
+assert_success "init --self with / in name succeeds" \
+    run_setup "$plugin" "$ws" init --self "a/b"
+assert_file   "dev-env.yaml created with / in name" "$ws/dev-env.yaml"
+assert_contains "/ is literal in dev-env.yaml" "$ws/dev-env.yaml" "name: a/b"
+cleanup "$ws"
+
+# Test with \ (backslash) metacharacter
+ws=$(new_workspace)
+git init -q -b main "$ws"
+assert_success "init --self with \\ in name succeeds" \
+    run_setup "$plugin" "$ws" init --self 'a\b'
+assert_file   "dev-env.yaml created with \\ in name" "$ws/dev-env.yaml"
+assert_contains "\\ is literal in dev-env.yaml" "$ws/dev-env.yaml" 'name: a\\b'
+cleanup "$ws"
+
+# Test with multiple metacharacters combined
+ws=$(new_workspace)
+git init -q -b main "$ws"
+assert_success "init --self with multiple metacharacters succeeds" \
+    run_setup "$plugin" "$ws" init --self 'api/v2&old'
+assert_file   "dev-env.yaml created with / and & together" "$ws/dev-env.yaml"
+assert_contains "multiple metacharacters are literal" "$ws/dev-env.yaml" 'name: api/v2&old'
+cleanup "$ws"
+
+cleanup "$plugin"
+
+# ─── Self-mode guards ─────────────────────────────────────────────────────────
+
+group "self-mode guards"
+
+plugin=$(new_plugin)
+ws=$(new_workspace)
+git init -q -b main "$ws"
+run_setup "$plugin" "$ws" init --self myrepo >/dev/null 2>&1
+
+out=$(run_setup "$plugin" "$ws" refresh-domain 2>&1)
+assert_failure "refresh-domain refuses on a self workspace" \
+    run_setup "$plugin" "$ws" refresh-domain
+assert_output_contains "refresh-domain explains it is a self workspace" \
+    "single-repo" "$out"
+
+printf 'domain:\n  name: fake\n  source: bundled\n' >> "$ws/dev-env.yaml"
+assert_failure "clone rejects self: and domain: together" \
+    run_setup "$plugin" "$ws" clone
+out=$(run_setup "$plugin" "$ws" clone 2>&1)
+assert_output_contains "mutual-exclusion error names both blocks" \
+    "mutually exclusive" "$out"
+cleanup "$ws" "$plugin"
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 
 cleanup "$PLUGIN"
