@@ -500,6 +500,29 @@ assert_output_contains "mutual-exclusion error names both blocks" \
     "mutually exclusive" "$out"
 cleanup "$ws" "$plugin"
 
+# ─── refresh-domain warns on local domain updates ─────────────────────────────
+
+group "refresh warns on local domain updates"
+
+ws=$(new_workspace)
+fixture=$(mktemp -d)
+make_domain_dir "$fixture" "haslessons"
+git_commit_all "$fixture"
+
+run_setup_yn "$PLUGIN" "$ws" "y" init "file://$fixture" >/dev/null 2>&1
+echo "# Domain Updates" > "$ws/domains/haslessons/UPDATES.md"
+
+out=$(run_setup_yn "$PLUGIN" "$ws" "n" refresh-domain 2>&1) || true
+assert_output_contains "warns about local domain updates" \
+    "UPDATES.md" "$out"
+assert_file "declining overwrite keeps UPDATES.md" "$ws/domains/haslessons/UPDATES.md"
+
+run_setup_yn "$PLUGIN" "$ws" "y" refresh-domain >/dev/null 2>&1
+assert_success "accepting overwrite still refreshes the domain" \
+    test -f "$ws/domains/haslessons/domain.yaml"
+
+cleanup "$ws" "$fixture"
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 
 cleanup "$PLUGIN"

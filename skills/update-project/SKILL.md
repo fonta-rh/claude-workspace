@@ -52,4 +52,6 @@ If nothing to update, say so and stop.
 Use the Edit tool for existing files. Use the Write tool for new detail
 files. Edit each file individually — do not rewrite entire files.
 
-Summarize what was updated.
+Summarize what was updated. If the session produced durable domain-level
+knowledge (not just project status), suggest `/workspace:update-domain` —
+this command never edits domain files itself.

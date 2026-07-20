@@ -577,6 +577,10 @@ fetch_external_domain() {
     local dest="$WORKSPACE_DOMAINS_DIR/$domain_name"
     if [[ -d "$dest" ]]; then
         log_warn "Domain '$domain_name' already installed at domains/$domain_name/"
+        if [[ -f "$dest/UPDATES.md" ]]; then
+            log_warn "Local domain updates found (domains/$domain_name/UPDATES.md) — overwriting discards them."
+            log_info "Run /workspace:update-domain's PR-back flow first to send them upstream."
+        fi
         read -rp "Overwrite? [y/N] " answer
         if [[ "$answer" != "y" && "$answer" != "Y" ]]; then
             rm -rf "$tmp_dir"

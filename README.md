@@ -45,6 +45,7 @@ domain, use `/workspace:create-domain`.
 | `/workspace:close-project` | Close a completed project and clean up its worktrees |
 | `/workspace:update-project` | Record what a session accomplished into the project docs |
 | `/workspace:consolidate-project` | Archive completed checklist items from a bloated project CLAUDE.md |
+| `/workspace:update-domain` | Feed lessons learned from a project back into its domain's context files |
 
 A SessionStart hook surfaces your recent projects whenever you launch Claude
 Code inside a workspace (it stays silent elsewhere).

@@ -25,16 +25,17 @@ Two roots are kept strictly separate:
 
 ```
 .claude-plugin/{plugin.json, marketplace.json}   Plugin + marketplace manifests
-skills/<name>/SKILL.md                            7 skills (workspace: prefix)
+skills/<name>/SKILL.md                            8 skills (workspace: prefix)
 skills/create-domain/context-template.md          Context-file template
 hooks/hooks.json                                  SessionStart → recent-projects.py
 scripts/setup.sh                                  Clone/update/init CLI (self-derives plugin root)
 scripts/workspace_lib.py                          Shared, yaml-free: resolve_workspace_root(), PLUGIN_ROOT
 scripts/{resume,consolidate,recent}-project*.py   Project tooling
+scripts/domain-info.py                            Project→domain resolution, writability, copy-on-write
 scripts/skills.py                                 Repo-skill symlink manager (scan/link/verify/unlink-check)
 domains/{example,tnf,lvm-operator}/               Bundled domains (read-only)
 templates/{dev-env.yaml.template, dev-env-self.yaml.template, settings.local.json.tpl}
-tests/{test_setup.sh, test_skills.py}             Test suites
+tests/{test_setup.sh, test_skills.py, test_domain_info.py}  Test suites
 ```
 
 ## Skills
@@ -48,6 +49,7 @@ tests/{test_setup.sh, test_skills.py}             Test suites
 | `/workspace:close-project` | Close a completed project (worktree cleanup) |
 | `/workspace:update-project` | Update project docs from the session |
 | `/workspace:consolidate-project` | Archive completed checklist items |
+| `/workspace:update-domain` | Feed lessons learned from a project back into its domain |
 
 ## Key Conventions
 

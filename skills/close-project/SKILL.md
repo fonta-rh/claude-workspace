@@ -217,6 +217,9 @@ If closing notes were added, include them in the confirmation.
 Remind the user that closed projects won't appear in the SessionStart
 summary, but can still be resumed with `/workspace:resume-project <name>`.
 
+If the project produced domain-worthy lessons, suggest
+`/workspace:update-domain <name>` before closing out.
+
 ---
 
 ## Important Notes
