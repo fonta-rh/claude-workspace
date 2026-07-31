@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +42,20 @@ def unlink_quietly(path: Path) -> None:
         path.unlink()
     except OSError:
         pass
+
+
+def passthrough() -> None:
+    """Hand the session start to recent-projects.py, preserving its behavior.
+
+    execv replaces this process, so recent-projects.py's stdout becomes ours
+    and its banner rendering is never duplicated here. Returns only if the
+    exec itself fails, in which case staying silent is the safe outcome.
+    """
+    script = Path(__file__).resolve().parent / "recent-projects.py"
+    try:
+        os.execv(sys.executable, [sys.executable, str(script)])
+    except OSError:
+        return
 
 
 def parse_timestamp(raw: object) -> datetime | None:
@@ -165,10 +180,12 @@ def cmd_write(args: argparse.Namespace) -> int:
 def cmd_read(args: argparse.Namespace) -> int:
     root = workspace_lib.resolve_workspace_root()
     if root is None:
+        # Not inside a workspace: stay silent, matching recent-projects.py.
         return 0
 
     marker = load_marker(marker_path(root))
     if marker is None:
+        passthrough()
         return 0
 
     emit({
@@ -204,7 +221,13 @@ def main() -> int:
     if args.command == "write":
         return cmd_write(args)
     if args.command == "read":
-        return cmd_read(args)
+        try:
+            return cmd_read(args)
+        except Exception:
+            # A SessionStart hook must never fail loudly. load_marker already
+            # swallows bad markers, so reaching here means something
+            # unexpected; silence beats a traceback in the user's context.
+            return 0
     return 0
 
 

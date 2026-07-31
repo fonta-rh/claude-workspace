@@ -199,5 +199,61 @@ class TestReadFresh(HandoffFixture):
         self.assertFalse(self.marker().exists())
 
 
+class TestReadDegradation(HandoffFixture):
+
+    def test_absent_marker_matches_recent_projects_exactly(self):
+        self.make_project("demo")
+        got = run_handoff(self.ws, "read").stdout
+        self.assertEqual(got, run_recent(self.ws).stdout)
+        self.assertIn("Recent projects", got)
+
+    def test_stale_marker_passes_through_and_is_deleted(self):
+        self.make_project("demo")
+        self.write_marker(project="demo", written_at=iso(-61))
+        got = run_handoff(self.ws, "read").stdout
+        self.assertNotIn("Checkpoint handoff pending", got)
+        self.assertEqual(got, run_recent(self.ws).stdout)
+        self.assertFalse(self.marker().exists())
+
+    def test_corrupt_marker_passes_through_and_is_deleted(self):
+        self.make_project("demo")
+        path = self.marker()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{not json")
+        got = run_handoff(self.ws, "read").stdout
+        self.assertEqual(got, run_recent(self.ws).stdout)
+        self.assertFalse(path.exists())
+
+    def test_wrong_version_passes_through_and_is_deleted(self):
+        self.make_project("demo")
+        self.write_marker(project="demo", version=99)
+        got = run_handoff(self.ws, "read").stdout
+        self.assertNotIn("Checkpoint handoff pending", got)
+        self.assertFalse(self.marker().exists())
+
+    def test_missing_next_task_passes_through(self):
+        self.make_project("demo")
+        self.write_marker(project="demo", next_task="")
+        got = run_handoff(self.ws, "read").stdout
+        self.assertNotIn("Checkpoint handoff pending", got)
+        self.assertFalse(self.marker().exists())
+
+    def test_no_projects_dir_is_silent(self):
+        # recent-projects.py exits 0 with no output when there is nothing to
+        # show; the passthrough must preserve that.
+        shutil.rmtree(self.ws / "projects")
+        self.assertEqual(run_handoff(self.ws, "read").stdout, "")
+
+    def test_no_workspace_root_is_silent(self):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("WORKSPACE_ROOT", "CLAUDE_PROJECT_DIR")}
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "read"],
+            capture_output=True, text=True, cwd=str(self.tmp), env=env,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
