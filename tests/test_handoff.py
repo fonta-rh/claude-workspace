@@ -144,5 +144,60 @@ class TestWrite(HandoffFixture):
         self.assertEqual(data["next_task"], "fresh task")
 
 
+class TestReadFresh(HandoffFixture):
+
+    def test_fresh_marker_emits_directive(self):
+        self.make_project("demo")
+        self.write_marker(project="demo")
+        out = json.loads(run_handoff(self.ws, "read").stdout)
+
+        hook_out = out["hookSpecificOutput"]
+        self.assertEqual(hook_out["hookEventName"], "SessionStart")
+        ctx = hook_out["additionalContext"]
+        self.assertIn("Checkpoint handoff pending", ctx)
+        self.assertIn("demo", ctx)
+        self.assertIn("reproduce with restic disabled", ctx)
+        self.assertIn("investigation.md", ctx)
+        self.assertIn("workspace:resume-project", ctx)
+        self.assertIn("demo", out["systemMessage"])
+
+    def test_fresh_marker_is_consumed(self):
+        self.make_project("demo")
+        self.write_marker(project="demo")
+        run_handoff(self.ws, "read")
+        self.assertFalse(self.marker().exists())
+
+    def test_second_read_does_not_refire(self):
+        self.make_project("demo")
+        self.write_marker(project="demo")
+        run_handoff(self.ws, "read")
+        second = run_handoff(self.ws, "read").stdout
+        self.assertNotIn("Checkpoint handoff pending", second)
+
+    def test_future_timestamp_is_treated_as_fresh(self):
+        self.make_project("demo")
+        self.write_marker(project="demo", written_at=iso(5))
+        out = run_handoff(self.ws, "read").stdout
+        self.assertIn("Checkpoint handoff pending", out)
+
+    def test_empty_load_files_renders_placeholder(self):
+        self.make_project("demo")
+        self.write_marker(project="demo", load_files=[])
+        out = json.loads(run_handoff(self.ws, "read").stdout)
+        self.assertIn("none recorded",
+                      out["hookSpecificOutput"]["additionalContext"])
+
+    def test_write_then_read_round_trip(self):
+        self.make_project("demo")
+        run_handoff(self.ws, "write", "--project", "demo",
+                    "--next-task", "check velero CSI logs",
+                    "--load-files", "investigation.md")
+        out = json.loads(run_handoff(self.ws, "read").stdout)
+        ctx = out["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("check velero CSI logs", ctx)
+        self.assertIn("investigation.md", ctx)
+        self.assertFalse(self.marker().exists())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

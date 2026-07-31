@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import workspace_lib
@@ -34,6 +34,92 @@ def marker_path(root: Path) -> Path:
 
 def emit(payload: dict) -> None:
     print(json.dumps(payload, indent=2))
+
+
+def unlink_quietly(path: Path) -> None:
+    try:
+        path.unlink()
+    except OSError:
+        pass
+
+
+def parse_timestamp(raw: object) -> datetime | None:
+    """Parse an ISO timestamp into an aware UTC datetime, or None."""
+    if not isinstance(raw, str):
+        return None
+    try:
+        stamp = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.astimezone()
+    return stamp.astimezone(timezone.utc)
+
+
+def load_marker(path: Path) -> dict | None:
+    """Consume the marker: return it if fresh and valid, else None.
+
+    The file is deleted whenever it existed, whatever its state. Consumption
+    is single-use by construction, so a repeated /clear cannot re-fire.
+    Never raises: a bad marker must not disturb a session start.
+    """
+    if not path.is_file():
+        return None
+    try:
+        raw = path.read_text()
+    except OSError:
+        unlink_quietly(path)
+        return None
+
+    unlink_quietly(path)
+
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or data.get("version") != MARKER_VERSION:
+        return None
+    if not data.get("project") or not data.get("next_task"):
+        return None
+
+    written = parse_timestamp(data.get("written_at"))
+    if written is None:
+        return None
+
+    age = (datetime.now(timezone.utc) - written).total_seconds()
+    if age > TTL_SECONDS:
+        return None
+
+    # A negative age means clock skew, not a marker from the future.
+    data["_age_seconds"] = max(age, 0.0)
+    if not isinstance(data.get("load_files"), list):
+        data["load_files"] = []
+    return data
+
+
+def humanize_age(seconds: float) -> str:
+    minutes = int(seconds // 60)
+    if minutes < 1:
+        return "just now"
+    if minutes == 1:
+        return "1 minute ago"
+    if minutes < 60:
+        return f"{minutes} minutes ago"
+    hours = minutes // 60
+    return "1 hour ago" if hours == 1 else f"{hours} hours ago"
+
+
+def build_directive(marker: dict) -> str:
+    files = ", ".join(marker["load_files"]) or "none recorded"
+    return (
+        f"Checkpoint handoff pending (saved {humanize_age(marker['_age_seconds'])}).\n\n"
+        f"Project: {marker['project']}\n"
+        f"Next task: {marker['next_task']}\n"
+        f"Detail files: {files}\n\n"
+        f"Invoke the workspace:resume-project skill with argument\n"
+        f"`{marker['project']}`. In Step 4, skip the task menu: read the detail\n"
+        f"files listed above and report readiness with the next task."
+    )
 
 
 def cmd_write(args: argparse.Namespace) -> int:
@@ -76,6 +162,28 @@ def cmd_write(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_read(args: argparse.Namespace) -> int:
+    root = workspace_lib.resolve_workspace_root()
+    if root is None:
+        return 0
+
+    marker = load_marker(marker_path(root))
+    if marker is None:
+        return 0
+
+    emit({
+        "systemMessage": (
+            f"Resuming {marker['project']} from checkpoint "
+            f"({humanize_age(marker['_age_seconds'])})."
+        ),
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": build_directive(marker),
+        },
+    })
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -86,6 +194,8 @@ def build_parser() -> argparse.ArgumentParser:
     write.add_argument("--load-files", default="",
                        help="Comma-separated detail files, relative to the project dir")
 
+    sub.add_parser("read", help="Consume a handoff at session start (hook mode)")
+
     return parser
 
 
@@ -93,6 +203,8 @@ def main() -> int:
     args = build_parser().parse_args()
     if args.command == "write":
         return cmd_write(args)
+    if args.command == "read":
+        return cmd_read(args)
     return 0
 
 
