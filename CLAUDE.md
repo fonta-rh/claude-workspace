@@ -25,16 +25,17 @@ Two roots are kept strictly separate:
 
 ```
 .claude-plugin/{plugin.json, marketplace.json}   Plugin + marketplace manifests
-skills/<name>/SKILL.md                            7 skills (workspace: prefix)
+skills/<name>/SKILL.md                            8 skills (workspace: prefix)
 skills/create-domain/context-template.md          Context-file template
-hooks/hooks.json                                  SessionStart → recent-projects.py
+hooks/hooks.json                                  SessionStart → recent-projects.py / handoff.py
 scripts/setup.sh                                  Clone/update/init CLI (self-derives plugin root)
 scripts/workspace_lib.py                          Shared, yaml-free: resolve_workspace_root(), PLUGIN_ROOT
 scripts/{resume,consolidate,recent}-project*.py   Project tooling
 scripts/skills.py                                 Repo-skill symlink manager (scan/link/verify/unlink-check)
+scripts/handoff.py                                Checkpoint marker: write (skill) / read (hook)
 domains/{example,tnf,lvm-operator}/               Bundled domains (read-only)
 templates/{dev-env.yaml.template, settings.local.json.tpl}
-tests/{test_setup.sh, test_skills.py}             Test suites
+tests/{test_setup.sh, test_skills.py, test_handoff.py}   Test suites
 ```
 
 ## Skills
@@ -44,6 +45,7 @@ tests/{test_setup.sh, test_skills.py}             Test suites
 | `/workspace:setup-environment` | Set up / refresh a workspace from a domain |
 | `/workspace:create-domain` | Build a custom workspace from arbitrary repos |
 | `/workspace:new-project` | Create a new project workspace for a task |
+| `/workspace:checkpoint` | Update project docs and arm a handoff for the next `/clear` |
 | `/workspace:resume-project` | Resume an existing project |
 | `/workspace:close-project` | Close a completed project (worktree cleanup) |
 | `/workspace:update-project` | Update project docs from the session |
@@ -60,6 +62,14 @@ tests/{test_setup.sh, test_skills.py}             Test suites
 - **PyYAML**: plugins can't declare python deps. `resume-project.py` emits a
   self-describing JSON error when PyYAML is missing; `workspace_lib.py` and
   `recent-projects.py` stay yaml-free so the SessionStart hook never needs it.
+- **Checkpoint handoff**: `/workspace:checkpoint` writes a single-use marker
+  to `<workspace>/.claude/handoff.json`; the SessionStart hook on the `clear`
+  matcher (`handoff.py read`) consumes it and tells Claude to resume that
+  project, then falls through to `recent-projects.py` when no handoff is
+  armed. Marker TTL 60 min, schema version 1. `handoff.py` is yaml-free for
+  the same reason `recent-projects.py` is. `/clear` itself can never be
+  issued by Claude — it is not among the built-ins reachable through the
+  Skill tool — so the marker is how state crosses that boundary.
 - Python scripts target **python3.9+** (macOS system python); they use
   `from __future__ import annotations` so `X | None` hints don't break there.
 
