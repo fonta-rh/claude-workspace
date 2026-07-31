@@ -25,17 +25,18 @@ Two roots are kept strictly separate:
 
 ```
 .claude-plugin/{plugin.json, marketplace.json}   Plugin + marketplace manifests
-skills/<name>/SKILL.md                            8 skills (workspace: prefix)
+skills/<name>/SKILL.md                            9 skills (workspace: prefix)
 skills/create-domain/context-template.md          Context-file template
 hooks/hooks.json                                  SessionStart → recent-projects.py / handoff.py
 scripts/setup.sh                                  Clone/update/init CLI (self-derives plugin root)
 scripts/workspace_lib.py                          Shared, yaml-free: resolve_workspace_root(), PLUGIN_ROOT
 scripts/{resume,consolidate,recent}-project*.py   Project tooling
+scripts/domain-info.py                            Project→domain resolution, writability, copy-on-write
 scripts/skills.py                                 Repo-skill symlink manager (scan/link/verify/unlink-check)
 scripts/handoff.py                                Checkpoint marker: write (skill) / read (hook)
 domains/{example,tnf,lvm-operator}/               Bundled domains (read-only)
-templates/{dev-env.yaml.template, settings.local.json.tpl}
-tests/{test_setup.sh, test_skills.py, test_handoff.py}   Test suites
+templates/{dev-env.yaml.template, dev-env-self.yaml.template, settings.local.json.tpl}
+tests/{test_setup.sh, test_skills.py, test_domain_info.py, test_handoff.py}  Test suites
 ```
 
 ## Skills
@@ -50,6 +51,7 @@ tests/{test_setup.sh, test_skills.py, test_handoff.py}   Test suites
 | `/workspace:close-project` | Close a completed project (worktree cleanup) |
 | `/workspace:update-project` | Update project docs from the session |
 | `/workspace:consolidate-project` | Archive completed checklist items |
+| `/workspace:update-domain` | Feed lessons learned from a project back into its domain |
 
 ## Key Conventions
 
@@ -72,6 +74,12 @@ tests/{test_setup.sh, test_skills.py, test_handoff.py}   Test suites
   Skill tool — so the marker is how state crosses that boundary.
 - Python scripts target **python3.9+** (macOS system python); they use
   `from __future__ import annotations` so `X | None` hints don't break there.
+- **Single-repo self-workspaces**: a top-level `self:` block (`name`,
+  `summary`) in `dev-env.yaml` marks a workspace whose root IS the wrapped
+  repo checkout (`setup.sh init --self`). Mutually exclusive with
+  `domain:`; `repos:` keeps its normal meaning (usually `[]`). Detection
+  in bash is grep-based (`has_self_block`). The plugin never touches the
+  wrapped repo's CLAUDE.md.
 
 ## Dev Loop
 

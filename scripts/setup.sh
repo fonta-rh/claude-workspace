@@ -12,6 +12,7 @@
 #   setup.sh --workspace <path> init <name>       Initialize from a bundled domain
 #   setup.sh --workspace <path> init <url>        Initialize from an external domain git URL
 #   setup.sh --workspace <path> init <url#subdir> External pack repo with multiple domains
+#   setup.sh --workspace <path> init --self [<name>] Initialize a single-repo self-workspace
 #   setup.sh --workspace <path> clone             Clone all repos (first time setup)
 #   setup.sh --workspace <path> clone <dir>       Clone a specific repo by directory name
 #   setup.sh --workspace <path> update            Update all repos (git pull)
@@ -217,6 +218,13 @@ print('|'.join([
     echo "|||"
 }
 
+# Returns 0 if a dev-env.yaml declares a top-level self: block (single-repo
+# self-workspace). grep-based so it needs no YAML parser (hook-safe).
+has_self_block() {
+    local yaml_file="${1:-$DEV_ENV_YAML}"
+    grep -q '^self:' "$yaml_file" 2>/dev/null
+}
+
 # ─── Repo Source Detection ────────────────────────────────────────────────────
 # Verifies dev-env.yaml exists, sets REPO_SOURCE and ACTIVE_DOMAIN_NAME.
 
@@ -229,6 +237,11 @@ detect_repo_source() {
         local domain_info
         domain_info=$(parse_yaml_domain "$DEV_ENV_YAML")
         ACTIVE_DOMAIN_NAME="${domain_info%%|*}"
+        if [[ -n "$ACTIVE_DOMAIN_NAME" ]] && has_self_block; then
+            log_error "dev-env.yaml declares both 'self:' and 'domain:' — they are mutually exclusive."
+            log_info "Remove one of the two blocks from: $DEV_ENV_YAML"
+            exit 1
+        fi
     else
         log_error "No dev-env.yaml found in workspace: $WORKSPACE_ROOT_RESOLVED"
         log_info "Options:"
@@ -564,6 +577,10 @@ fetch_external_domain() {
     local dest="$WORKSPACE_DOMAINS_DIR/$domain_name"
     if [[ -d "$dest" ]]; then
         log_warn "Domain '$domain_name' already installed at domains/$domain_name/"
+        if [[ -f "$dest/UPDATES.md" ]]; then
+            log_warn "Local domain updates found (domains/$domain_name/UPDATES.md) — overwriting discards them."
+            log_info "Run /workspace:update-domain's PR-back flow first to send them upstream."
+        fi
         read -rp "Overwrite? [y/N] " answer
         if [[ "$answer" != "y" && "$answer" != "Y" ]]; then
             rm -rf "$tmp_dir"
@@ -795,11 +812,76 @@ init_domain() {
     log_info "  setup.sh --workspace $WORKSPACE_ROOT_RESOLVED status   — Check repo status"
 }
 
+# ─── Init Self (single-repo workspace) ───────────────────────────────────────
+# The workspace root IS the wrapped repo checkout. No domain, nothing to
+# clone; dev-env.yaml gets a self: block and an empty repos list.
+
+init_self() {
+    local name="${1:-}"
+
+    if [[ ! -d "$WORKSPACE_ROOT_RESOLVED/.git" ]]; then
+        log_error "Not a git repository root: $WORKSPACE_ROOT_RESOLVED"
+        log_info "A self-workspace wraps an existing repo checkout."
+        log_info "Run with --workspace pointing at the repo root."
+        exit 1
+    fi
+
+    if [[ -f "$DEV_ENV_YAML" ]]; then
+        log_error "dev-env.yaml already exists: $DEV_ENV_YAML"
+        log_info "This workspace is already initialized. Edit the file directly,"
+        log_info "or remove it and re-run 'init --self' to start over."
+        exit 1
+    fi
+
+    [[ -z "$name" ]] && name="$(basename "$WORKSPACE_ROOT_RESOLVED")"
+
+    # Safely substitute __SELF_NAME__ with the provided name, handling sed
+    # metacharacters (/, &, \). Write to a temp file first to avoid truncating
+    # dev-env.yaml on substitution failure.
+    local tmp_dev_env name_escaped
+    tmp_dev_env=$(mktemp) || { log_error "Cannot create temporary file"; return 1; }
+
+    # Escape sed metacharacters in the name: \ -> \\, & -> \&, / -> \/
+    # Process in order to avoid double-escaping.
+    name_escaped="$name"
+    name_escaped="${name_escaped//\\/\\\\}"
+    name_escaped="${name_escaped//&/\\&}"
+    name_escaped="${name_escaped//\//\\/}"
+
+    if ! sed "s/__SELF_NAME__/$name_escaped/" "$TEMPLATES_DIR/dev-env-self.yaml.template" > "$tmp_dev_env"; then
+        rm -f "$tmp_dev_env"
+        log_error "Failed to substitute name in template"
+        return 1
+    fi
+
+    if ! mv "$tmp_dev_env" "$DEV_ENV_YAML"; then
+        rm -f "$tmp_dev_env"
+        log_error "Failed to create dev-env.yaml"
+        return 1
+    fi
+
+    log_success "Initialized dev-env.yaml (self-workspace: $name)"
+
+    mkdir -p "$WORKSPACE_ROOT_RESOLVED/projects"
+    apply_settings_template ""
+
+    echo
+    log_info "Next steps:"
+    log_info "  Fill in self.summary in dev-env.yaml"
+    log_info "  /workspace:new-project — scaffold a task under projects/"
+}
+
 # ─── Refresh Domain ──────────────────────────────────────────────────────────
 
 refresh_domain() {
     if [[ ! -f "$DEV_ENV_YAML" ]]; then
         log_error "No dev-env.yaml found. Run 'init' first."
+        exit 1
+    fi
+
+    if has_self_block; then
+        log_error "This is a single-repo self-workspace — no domain to refresh."
+        log_info "Self-workspaces have no domain; edit dev-env.yaml directly."
         exit 1
     fi
 
@@ -860,6 +942,8 @@ usage() {
     echo "  init <name>           Initialize from a bundled/workspace domain"
     echo "  init <url>            Initialize from an external domain git URL"
     echo "  init <url#subdir>     External pack containing multiple domains"
+    echo "  init --self [<name>]  Initialize a single-repo self-workspace"
+    echo "                        (workspace root = the repo checkout; no domain)"
     echo "  clone                 Clone all repos (first time setup)"
     echo "  clone <dir>           Clone a specific repo by directory name"
     echo "  update                Update all repos (git pull)"
@@ -907,7 +991,11 @@ main() {
     case "$action" in
         init)
             resolve_workspace_root create
-            init_domain "$target"
+            if [[ "$target" == "--self" ]]; then
+                init_self "${3:-}"
+            else
+                init_domain "$target"
+            fi
             ensure_skills_dir
             ;;
         refresh-domain)
