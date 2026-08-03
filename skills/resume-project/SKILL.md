@@ -143,6 +143,18 @@ Add: "Domain docs available for deeper reference (architecture, debugging)."
 
 ## Step 4: Task Selection
 
+**If a checkpoint handoff was injected into this session** — the SessionStart
+context opened with "Checkpoint handoff pending" and named a project, a next
+task, and detail files — then the task decision has already been made:
+
+- Skip **4a** and **4b** entirely. Do not present a menu.
+- Read the named detail files with the Read tool, joining them to `P.dir`.
+- Report readiness: the loaded files, the checklist progress, and the next
+  task from the directive.
+- Continue with **4d**, **4e**, and **4f** as normal.
+
+Otherwise, proceed with 4a onward.
+
 **4a.** Build a task menu from `P.checklist.unchecked_items`. For each
 item, match its text and `section` against `P.reference_files` descriptions
 to determine which detail files are relevant. Reference-file paths are

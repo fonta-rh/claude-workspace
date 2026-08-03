@@ -2,10 +2,20 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup|resume|fork|compact",
         "hooks": [
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/recent-projects.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.py\" read"
           }
         ]
       }
